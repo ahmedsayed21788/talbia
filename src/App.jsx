@@ -82,6 +82,136 @@ const getDetailedAttendance = (pId, coachId, attendance) => {
 };
 
 
+
+// ─────────── تصدير PDF ───────────
+const exportPDF = (title, rows, filename) => {
+  const html = `
+    <!DOCTYPE html>
+    <html dir="rtl">
+    <head>
+      <meta charset="UTF-8"/>
+      <style>
+        body { font-family: Arial, sans-serif; direction: rtl; padding: 20px; color: #1a2540; }
+        h1 { color: #00d4aa; text-align: center; font-size: 22px; margin-bottom: 4px; }
+        .subtitle { text-align: center; color: #6a7a9a; font-size: 13px; margin-bottom: 20px; }
+        table { width: 100%; border-collapse: collapse; font-size: 12px; }
+        th { background: #0c1525; color: #00d4aa; padding: 10px 8px; text-align: right; }
+        tr:nth-child(even) { background: #f0f4f8; }
+        td { padding: 8px; border-bottom: 1px solid #d0d8e8; }
+        .footer { text-align: center; color: #aaa; font-size: 10px; margin-top: 20px; }
+        @media print { body { padding: 10px; } }
+      </style>
+    </head>
+    <body>
+      <h1>🥋 نادي الطالبية</h1>
+      <div class="subtitle">${title} — ${new Date().toLocaleDateString("ar-EG")}</div>
+      <table>
+        <tr>${Object.keys(rows[0]).map(k => `<th>${k}</th>`).join("")}</tr>
+        ${rows.map(r => `<tr>${Object.values(r).map(v => `<td>${v}</td>`).join("")}</tr>`).join("")}
+      </table>
+      <div class="footer">نظام إدارة نادي الطالبية</div>
+    </body>
+    </html>
+  `;
+  const w = window.open("", "_blank");
+  w.document.write(html);
+  w.document.close();
+  setTimeout(() => { w.print(); }, 500);
+};
+
+
+// ─────────── نسخة احتياطية تلقائية ───────────
+const checkAndAutoBackup = (players, coaches, attendance, payments, playerDetails, logs) => {
+  const lastBackup = localStorage.getItem("lastBackupDate");
+  const today = getToday();
+  const lastMonth = localStorage.getItem("lastMonthlyReport");
+  const currentMonth = today.slice(0, 7); // YYYY-MM
+
+  // نسخة احتياطية أسبوعية
+  const shouldWeeklyBackup = !lastBackup || 
+    (new Date(today) - new Date(lastBackup)) / (1000 * 60 * 60 * 24) >= 7;
+  
+  if (shouldWeeklyBackup) {
+    const backup = { date: today, players, coaches, attendance, payments, playerDetails };
+    const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `backup_talbia_${today}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    localStorage.setItem("lastBackupDate", today);
+    showToast("📦 تم تحميل النسخة الاحتياطية الأسبوعية تلقائياً", "success");
+  }
+
+  // تقرير شهري
+  if (!lastMonth || lastMonth !== currentMonth) {
+    const now = new Date();
+    const isLastDayOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate() === now.getDate();
+    if (isLastDayOfMonth) {
+      generateMonthlyReport(players, coaches, attendance, payments, playerDetails, currentMonth);
+      localStorage.setItem("lastMonthlyReport", currentMonth);
+    }
+  }
+};
+
+const generateMonthlyReport = (players, coaches, attendance, payments, playerDetails, month) => {
+  const activeP = players.filter(p => checkSubStatus(payments[p.id]?.date).valid);
+  const totalRevenue = activeP.reduce((sum, p) => {
+    const st = SUB_TYPES.find(s => s.label === (playerDetails[p.id]?.subType));
+    return sum + (st ? st.price : 300);
+  }, 0);
+
+  const reportData = {
+    month,
+    generatedAt: new Date().toISOString(),
+    summary: {
+      totalPlayers: players.length,
+      activePlayers: activeP.length,
+      expiredPlayers: players.length - activeP.length,
+      totalRevenue,
+    },
+    coaches: coaches.filter(c => !c.isAdmin).map(c => {
+      const myP = players.filter(p => String(p.coachId) === String(c.id));
+      const totalAtt = myP.reduce((s, p) => s + getDetailedAttendance(p.id, c.id, attendance).count, 0);
+      return {
+        name: c.name,
+        players: myP.length,
+        avgAttendance: myP.length ? Math.round(totalAtt / myP.length) : 0,
+      };
+    }),
+    players: players.map(p => {
+      const att = getDetailedAttendance(p.id, p.coachId, attendance);
+      const coach = coaches.find(c => c.id === p.coachId);
+      const pd = playerDetails[p.id] || {};
+      return {
+        name: p.name,
+        coach: coach?.name || "---",
+        belt: pd.belt || "---",
+        attendance: att.count,
+        percentage: att.percentage,
+        subscription: checkSubStatus(payments[p.id]?.date).msg,
+        subType: pd.subType || "---",
+      };
+    }),
+  };
+
+  // حفظ التقرير في localStorage
+  const reports = JSON.parse(localStorage.getItem("monthlyReports") || "[]");
+  reports.unshift(reportData);
+  localStorage.setItem("monthlyReports", JSON.stringify(reports.slice(0, 24))); // آخر 24 شهر
+
+  // تحميل التقرير
+  const blob = new Blob([JSON.stringify(reportData, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `تقرير_شهر_${month}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast(`📊 تم تحميل تقرير شهر ${month} ✅`, "success");
+};
+
 // ─────────── واتساب شير ───────────
 const shareWhatsApp = (text) => {
   const encoded = encodeURIComponent(text);
@@ -201,6 +331,13 @@ const globalCSS = `
   --text: #e8edf5; --muted: #4a6080; --muted2: #6a80a0;
   --card-glow: 0 0 0 1px var(--border), 0 4px 24px rgba(0,0,0,0.5);
   --card-glow-active: 0 0 0 1px var(--accent), 0 4px 32px rgba(0,212,170,0.15);
+}
+.light-mode {
+  --bg: #f0f4f8; --surface: #ffffff; --surface2: #e8edf5; --surface3: #dde3ed;
+  --border: #d0d8e8; --border2: #b8c4d8;
+  --text: #1a2540; --muted: #6a7a9a; --muted2: #8a9ab8;
+  --card-glow: 0 0 0 1px var(--border), 0 4px 16px rgba(0,0,0,0.08);
+  --card-glow-active: 0 0 0 1px var(--accent), 0 4px 20px rgba(0,212,170,0.12);
 }
 @keyframes slideDown { from { opacity:0; transform: translateY(-10px); } to { opacity:1; transform: translateY(0); } }
 @keyframes fadeIn { from { opacity:0; } to { opacity:1; } }
@@ -461,6 +598,35 @@ select.input-field option { background: var(--surface); }
 @media (max-width: 500px) {
   .grid-3 { grid-template-columns: 1fr 1fr; }
 }
+
+/* Swipe tabs on mobile */
+.tab-bar { -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+.tab-bar::-webkit-scrollbar { display: none; }
+
+/* Smooth transitions */
+.player-row, .card, .stat-card { animation: fadeIn 0.3s ease; }
+
+/* Mobile optimizations */
+@media (max-width: 500px) {
+  .btn { padding: 10px 14px; font-size: 13px; }
+  .stat-value { font-size: 20px; }
+  .player-row { padding: 12px 14px; }
+  .header-bar { padding: 12px 16px; }
+}
+
+/* Glassmorphism for cards */
+.glass-card {
+  background: rgba(12,21,37,0.7);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 18px;
+}
+
+/* Neon glow effects */
+.glow-green { box-shadow: 0 0 15px rgba(0,212,170,0.3); }
+.glow-blue { box-shadow: 0 0 15px rgba(0,153,255,0.3); }
+.glow-red { box-shadow: 0 0 15px rgba(255,69,96,0.3); }
 `;
 
 // ───────────── Donut Chart ─────────────
@@ -555,6 +721,49 @@ const coachTaunts = {
 };
 
 
+
+// ─────────── Heatmap الحضور ───────────
+function AttendanceHeatmap({ playerId, coachId, attendance }) {
+  const today = new Date();
+  const days = [];
+  for (let i = 29; i >= 0; i--) {
+    const d = new Date(today);
+    d.setDate(today.getDate() - i);
+    const key = `${coachId}_${d.toISOString().split("T")[0]}`;
+    const present = attendance[key]?.[playerId] === "present";
+    days.push({ date: d.toISOString().split("T")[0], present });
+  }
+  return (
+    <div style={{ marginTop: 8 }}>
+      <div style={{ fontSize: 10, color: "var(--muted)", marginBottom: 4 }}>آخر 30 يوم</div>
+      <div style={{ display: "flex", gap: 3, flexWrap: "wrap" }}>
+        {days.map((d, i) => (
+          <div key={i} title={d.date}
+            style={{ width: 14, height: 14, borderRadius: 3, background: d.present ? "var(--accent)" : "var(--border)", opacity: d.present ? 1 : 0.5, transition: "all 0.2s" }} />
+        ))}
+      </div>
+      <div style={{ display: "flex", gap: 6, marginTop: 4, alignItems: "center" }}>
+        <div style={{ width: 10, height: 10, borderRadius: 2, background: "var(--accent)" }}/>
+        <span style={{ fontSize: 9, color: "var(--muted)" }}>حاضر</span>
+        <div style={{ width: 10, height: 10, borderRadius: 2, background: "var(--border)" }}/>
+        <span style={{ fontSize: 9, color: "var(--muted)" }}>غائب</span>
+      </div>
+    </div>
+  );
+}
+
+// ─────────── Dark/Light Mode Toggle ───────────
+function ThemeToggle({ darkMode, setDarkMode }) {
+  return (
+    <button onClick={() => setDarkMode(!darkMode)} style={{
+      background: "var(--surface2)", border: "1px solid var(--border)", borderRadius: 20,
+      padding: "4px 12px", cursor: "pointer", fontSize: 16, transition: "all 0.3s"
+    }}>
+      {darkMode ? "☀️" : "🌙"}
+    </button>
+  );
+}
+
 // ───────────── Belt Badge ─────────────
 function BeltBadge({ belt }) {
   const b = BELTS.find(x => x.label === belt) || BELTS[0];
@@ -579,6 +788,7 @@ export default function App() {
   const [logs, setLogs] = useState([]);
   const [playerExtra, setPlayerExtra] = useState({});
   const [trainingSettings, setTrainingSettings] = useState({ startHour: 17, duration: 90 });
+  const [darkMode, setDarkMode] = useState(true);
 
   useEffect(() => {
     const script = document.createElement("script");
@@ -587,6 +797,7 @@ export default function App() {
     document.body.appendChild(script);
 
     const fetchData = async () => {
+      const adminData = [{ id: 100, username: "admin", password: "2201", name: "المدير الإدارى", isAdmin: true }];
       try {
         const [cSnap, pSnap, aSnap, paySnap, nSnap, pdSnap, evSnap, logsSnap, pExtraSnap, trainSnap] = await Promise.all([
           getDoc(doc(db, "clubData", "coaches")),
@@ -600,8 +811,9 @@ export default function App() {
           getDoc(doc(db, "clubData", "playerExtra")),
           getDoc(doc(db, "clubData", "trainingSettings")),
         ]);
-        const adminData = [{ id: 100, username: "admin", password: "2201", name: "المدير الإدارى", isAdmin: true }];
         let dbCoaches = cSnap.exists() ? JSON.parse(cSnap.data().value) : adminData;
+        const hasAdmin = dbCoaches.some(c => c.username === "admin");
+        if (!hasAdmin) dbCoaches = [adminData[0], ...dbCoaches];
         setCoaches(dbCoaches.map(c => c.username === "admin" ? { ...c, password: "2201" } : c));
         setPlayers(pSnap.exists() ? JSON.parse(pSnap.data().value) : []);
         setAttendance(aSnap.exists() ? JSON.parse(aSnap.data().value) : {});
@@ -612,11 +824,25 @@ export default function App() {
         setLogs(logsSnap.exists() ? JSON.parse(logsSnap.data().value) : []);
         setPlayerExtra(pExtraSnap.exists() ? JSON.parse(pExtraSnap.data().value) : {});
         setTrainingSettings(trainSnap.exists() ? JSON.parse(trainSnap.data().value) : { startHour: 17, duration: 90 });
-      } catch (e) { console.error(e); }
+      } catch (e) { 
+        console.error("Firebase error:", e);
+        setCoaches(adminData);
+        showToast("تحقق من إعدادات Firebase", "error");
+      }
       setLoading(false);
     };
     fetchData();
   }, []);
+
+  // تحقق من النسخة الاحتياطية التلقائية كل يوم
+  useEffect(() => {
+    if (!loading && players.length > 0) {
+      const timer = setTimeout(() => {
+        checkAndAutoBackup(players, coaches, attendance, payments, playerDetails, logs);
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [loading]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const save = async (key, data) => {
     try { await setDoc(doc(db, "clubData", key), { value: JSON.stringify(data) }); }
@@ -624,14 +850,30 @@ export default function App() {
   };
 
   if (loading) return (
-    <div style={{ color: "white", textAlign: "center", marginTop: "20%", fontFamily: "'Tajawal',sans-serif", direction: "rtl" }}>
-      <div style={{ fontSize: 40, marginBottom: 12 }}>🥋</div>
-      <div style={{ fontSize: 18, fontWeight: 700, color: "var(--accent)" }}>جاري تحميل نادي الطالبية...</div>
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "100vh", background: "var(--bg)", fontFamily: "'Tajawal',sans-serif", direction: "rtl" }}>
+      <style>{`
+        @keyframes splashPulse { 0%,100%{transform:scale(1);opacity:1} 50%{transform:scale(1.15);opacity:0.8} }
+        @keyframes splashFade { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
+        @keyframes spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
+        .splash-logo { animation: splashPulse 1.5s ease-in-out infinite; }
+        .splash-text { animation: splashFade 0.8s ease forwards; }
+        .splash-ring { animation: spin 1.5s linear infinite; }
+      `}</style>
+      <div style={{ position: "relative", marginBottom: 24 }}>
+        <svg className="splash-ring" width="100" height="100" viewBox="0 0 100 100">
+          <circle cx="50" cy="50" r="45" fill="none" stroke="var(--border)" strokeWidth="4"/>
+          <circle cx="50" cy="50" r="45" fill="none" stroke="var(--accent)" strokeWidth="4"
+            strokeDasharray="283" strokeDashoffset="200" strokeLinecap="round"/>
+        </svg>
+        <img src="/logo192.png" alt="logo" className="splash-logo" style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%,-50%)", width: 60, height: 60, objectFit: "contain", borderRadius: 12 }} />
+      </div>
+      <div className="splash-text" style={{ fontSize: 26, fontWeight: 900, background: "linear-gradient(135deg,var(--accent),var(--accent2))", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>نادي الطالبية</div>
+      <div className="splash-text" style={{ fontSize: 13, color: "var(--muted)", marginTop: 8, animationDelay: "0.3s" }}>جاري التحميل...</div>
     </div>
   );
 
   return (
-    <div style={{ direction: "rtl", minHeight: "100vh", background: "var(--bg)", color: "var(--text)" }}>
+    <div className={darkMode ? "" : "light-mode"} style={{ direction: "rtl", minHeight: "100vh", background: "var(--bg)", color: "var(--text)" }}>
       <style>{globalCSS}</style>
       <ToastContainer />
       {!user ? (
@@ -641,10 +883,16 @@ export default function App() {
           <div className="header-bar">
             <div>
               <div style={{ fontWeight: 800, fontSize: 15 }}>{user.name}</div>
-              <small style={{ color: "var(--muted)", fontSize: 11 }}>{user.isAdmin ? "🛡 مدير الإدارى" : "🥋 مدرب"}</small>
+              <small style={{ color: "var(--muted)", fontSize: 11 }}>{user.isAdmin ? "🛡 مدير الادارى" : "🥋 مدرب"}</small>
             </div>
-            <div className="logo-text">الطالبية</div>
-            <button onClick={() => { setUser(null); showToast("تم تسجيل الخروج بنجاح", "info"); }} className="btn btn-ghost btn-sm">خروج</button>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <img src="/logo192.png" alt="logo" style={{ width: 28, height: 28, objectFit: "contain", borderRadius: 6 }} />
+              <div className="logo-text">الطالبية</div>
+            </div>
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <ThemeToggle darkMode={darkMode} setDarkMode={setDarkMode} />
+              <button onClick={() => { setUser(null); showToast("تم تسجيل الخروج بنجاح", "info"); }} className="btn btn-ghost btn-sm">خروج</button>
+            </div>
           </div>
           <div style={{ maxWidth: 720, margin: "0 auto", padding: "16px" }}>
             {user.isAdmin ? (
@@ -696,12 +944,21 @@ function LoginPage({ coaches, onLogin }) {
   };
 
   return (
-    <div onClick={enableAudio} style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100vh", padding: 16 }}>
-      <div style={{ width: "100%", maxWidth: 360 }}>
+    <div onClick={enableAudio} style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100vh", padding: 16, position: "relative", overflow: "hidden" }}>
+      {/* Animated background */}
+      <style>{`
+        @keyframes float1 { 0%,100%{transform:translate(0,0) rotate(0deg)} 50%{transform:translate(20px,-30px) rotate(180deg)} }
+        @keyframes float2 { 0%,100%{transform:translate(0,0) rotate(0deg)} 50%{transform:translate(-15px,25px) rotate(-180deg)} }
+        @keyframes loginFade { from{opacity:0;transform:translateY(30px)} to{opacity:1;transform:translateY(0)} }
+        .login-card-anim { animation: loginFade 0.6s ease forwards; }
+      `}</style>
+      <div style={{ position:"absolute", width:200, height:200, borderRadius:"50%", background:"rgba(0,212,170,0.04)", top:-50, right:-50, animation:"float1 8s ease-in-out infinite" }}/>
+      <div style={{ position:"absolute", width:150, height:150, borderRadius:"50%", background:"rgba(0,153,255,0.04)", bottom:-30, left:-30, animation:"float2 6s ease-in-out infinite" }}/>
+      <div className="login-card-anim" style={{ width: "100%", maxWidth: 360, position: "relative", zIndex: 1 }}>
         <div style={{ textAlign: "center", marginBottom: 32 }}>
-          <div style={{ fontSize: 56, marginBottom: 8 }}>🥋</div>
-          <div className="logo-text" style={{ fontSize: 28 }}>نادي الطالبية</div>
-          <div style={{ color: "var(--muted)", fontSize: 13, marginTop: 4 }}>نظام إدارة الأكاديمية</div>
+          <img src="/logo512.png" alt="logo" style={{ width: 90, height: 90, objectFit: "contain", borderRadius: 20, marginBottom: 8, filter: "drop-shadow(0 0 20px rgba(0,212,170,0.4))" }} />
+          <div className="logo-text" style={{ fontSize: 30 }}>نادي الطالبية</div>
+          <div style={{ color: "var(--muted)", fontSize: 13, marginTop: 6, letterSpacing: 2 }}>نظام إدارة الأكاديمية</div>
         </div>
         <div className="card" style={{ padding: 28 }}>
           <input className="input-field" placeholder="اسم المستخدم" value={u} onChange={e => setU(e.target.value)}
@@ -771,12 +1028,12 @@ function AdminDashboard({ coaches, setCoaches, players, setPlayers, attendance, 
       {tab === "players" && <AdminPlayers coaches={coaches} players={players} setPlayers={setPlayers} playerDetails={playerDetails} setPlayerDetails={setPlayerDetails} />}
       {tab === "coaches" && <AdminCoaches coaches={coaches} setCoaches={setCoaches} />}
       {tab === "payments" && <AdminPayments players={players} payments={payments} setPayments={setPayments} />}
-      {tab === "events" && <AdminEvents events={events} setEvents={setEvents} players={players} playerDetails={playerDetails} setPlayerDetails={setPlayerDetails} />}
+      {tab === "events" && <AdminEvents events={events} setEvents={setEvents} players={players} playerDetails={playerDetails} setPlayerDetails={setPlayerDetails} coaches={coaches} />}
       {tab === "alerts" && <AdminAlerts players={players} attendance={attendance} payments={payments} coaches={coaches} playerDetails={playerDetails} />}
       {tab === "leaderboard" && <AdminLeaderboard players={players} coaches={coaches} attendance={attendance} payments={payments} playerDetails={playerDetails} />}
       {tab === "settings" && <AdminSettings trainingSettings={trainingSettings} setTrainingSettings={setTrainingSettings} coaches={coaches} />}
       {tab === "logs" && <AdminLogs logs={logs} setLogs={setLogs} />}
-      {tab === "reset" && <AdminReset attendance={attendance} setAttendance={setAttendance} payments={payments} setPayments={setPayments} logs={logs} setLogs={setLogs} players={players} coaches={coaches} />}
+      {tab === "reset" && <AdminReset attendance={attendance} setAttendance={setAttendance} payments={payments} setPayments={setPayments} logs={logs} setLogs={setLogs} players={players} coaches={coaches} playerDetails={playerDetails} />}
     </div>
   );
 }
@@ -1003,7 +1260,18 @@ function AdminReports({ coaches, players, attendance, payments, playerDetails })
   return (
     <div>
       <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-        <button onClick={exportExcel} className="btn btn-blue" style={{ flex: 1 }}>📥 تصدير إكسل</button>
+        <button onClick={exportExcel} className="btn btn-blue" style={{ flex: 1 }}>📥 إكسل</button>
+        <button onClick={() => {
+          const rows = players.filter(p => p.name.includes(search)).map(p => {
+            const att = getDetailedAttendance(p.id, p.coachId, attendance);
+            const sub = checkSubStatus(payments[p.id]?.date);
+            const coach = coaches.find(c => c.id === p.coachId);
+            const pd = playerDetails[p.id] || {};
+            return { "الاسم": p.name, "المدرب": coach?.name||"---", "الحزام": pd.belt||"---", "الحضور": `${att.count} يوم`, "النسبة": `${att.percentage}%`, "الاشتراك": sub.msg };
+          });
+          if (rows.length) exportPDF("تقرير اللاعبين", rows, "تقرير");
+          else showToast("لا يوجد بيانات", "info");
+        }} className="btn btn-ghost" style={{ flex: 1 }}>🖨️ PDF</button>
         <button onClick={() => {
           const activeP = players.filter(p => checkSubStatus(payments[p.id]?.date).valid);
           const expiredP = players.filter(p => !checkSubStatus(payments[p.id]?.date).valid);
@@ -1116,6 +1384,7 @@ function AdminCoaches({ coaches, setCoaches }) {
 // ─────────── Admin Players ───────────
 function AdminPlayers({ coaches, players, setPlayers, playerDetails, setPlayerDetails }) {
   const [n, setN] = useState(""); const [cId, setCId] = useState(""); const [belt, setBelt] = useState("أبيض"); const [joinDate, setJoinDate] = useState(getToday()); const [subType, setSubType] = useState("غير عضو");
+  const [newBirthdate, setNewBirthdate] = useState(""); const [newPhone, setNewPhone] = useState(""); const [newWeight, setNewWeight] = useState(""); const [newHeight, setNewHeight] = useState(""); const [newRegFeePaid, setNewRegFeePaid] = useState(false);
   const [search, setSearch] = useState("");
   const [confirm, setConfirm] = useState(null);
   const [editId, setEditId] = useState(null);
@@ -1124,9 +1393,15 @@ function AdminPlayers({ coaches, players, setPlayers, playerDetails, setPlayerDe
     if (n && cId) {
       const newId = Date.now();
       setPlayers([...players, { id: newId, name: n, coachId: Number(cId) }]);
-      setPlayerDetails({ ...playerDetails, [newId]: { belt, joinDate, regFeePaid: false, subType: "غير عضو" } });
+      setPlayerDetails({ ...playerDetails, [newId]: { 
+        belt, joinDate, subType,
+        birthdate: newBirthdate, phone: newPhone,
+        weight: newWeight, height: newHeight,
+        regFeePaid: newRegFeePaid
+      }});
       showToast(`تم إضافة اللاعب ${n} بنجاح 🎉`, "success");
-      setN(""); setCId(""); setBelt("أبيض"); setJoinDate(getToday());
+      setN(""); setCId(""); setBelt("أبيض"); setJoinDate(getToday()); setSubType("غير عضو");
+      setNewBirthdate(""); setNewPhone(""); setNewWeight(""); setNewHeight(""); setNewRegFeePaid(false);
     } else showToast("يرجى ملء الاسم واختيار المدرب", "error");
   };
 
@@ -1137,31 +1412,84 @@ function AdminPlayers({ coaches, players, setPlayers, playerDetails, setPlayerDe
       <ConfirmModal open={!!confirm} msg={confirm?.msg} onConfirm={() => { confirm?.fn(); setConfirm(null); }} onCancel={() => setConfirm(null)} />
 
       <div className="card">
-        <div style={{ fontWeight: 800, marginBottom: 12, fontSize: 15 }}>➕ إضافة لاعب جديد</div>
-        <input className="input-field" placeholder="اسم اللاعب" value={n} onChange={e => setN(e.target.value)} />
-        <select className="input-field" value={cId} onChange={e => setCId(e.target.value)}>
-          <option value="">اختر المدرب</option>
-          {coaches.filter(c => !c.isAdmin).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-        </select>
+        <div style={{ fontWeight: 800, marginBottom: 14, fontSize: 15 }}>➕ إضافة لاعب جديد</div>
+        
+        {/* الاسم والمدرب */}
         <div className="grid-2">
           <div>
-            <label style={{ fontSize: 12, color: "var(--muted)", marginBottom: 4, display: "block" }}>الحزام</label>
+            <label style={{ fontSize: 11, color: "var(--muted)", display: "block", marginBottom: 4 }}>اسم اللاعب *</label>
+            <input className="input-field" placeholder="الاسم كاملاً" value={n} onChange={e => setN(e.target.value)} />
+          </div>
+          <div>
+            <label style={{ fontSize: 11, color: "var(--muted)", display: "block", marginBottom: 4 }}>المدرب *</label>
+            <select className="input-field" value={cId} onChange={e => setCId(e.target.value)}>
+              <option value="">اختر المدرب</option>
+              {coaches.filter(c => !c.isAdmin).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          </div>
+        </div>
+
+        {/* الحزام ونوع الاشتراك */}
+        <div className="grid-2">
+          <div>
+            <label style={{ fontSize: 11, color: "var(--muted)", display: "block", marginBottom: 4 }}>الحزام</label>
             <select className="input-field" value={belt} onChange={e => setBelt(e.target.value)}>
               {BELTS.map(b => <option key={b.label} value={b.label}>{b.label}</option>)}
             </select>
           </div>
           <div>
-            <label style={{ fontSize: 12, color: "var(--muted)", marginBottom: 4, display: "block" }}>تاريخ الانضمام</label>
+            <label style={{ fontSize: 11, color: "var(--muted)", display: "block", marginBottom: 4 }}>نوع الاشتراك</label>
+            <select className="input-field" value={subType} onChange={e => setSubType(e.target.value)}>
+              {SUB_TYPES.map(s => <option key={s.label} value={s.label}>{s.icon} {s.label} - {s.price} جنيه</option>)}
+            </select>
+          </div>
+        </div>
+
+        {/* تاريخ الميلاد وتاريخ الانضمام */}
+        <div className="grid-2">
+          <div>
+            <label style={{ fontSize: 11, color: "var(--muted)", display: "block", marginBottom: 4 }}>🎂 تاريخ الميلاد</label>
+            <input type="date" className="input-field" value={newBirthdate} onChange={e => setNewBirthdate(e.target.value)} />
+          </div>
+          <div>
+            <label style={{ fontSize: 11, color: "var(--muted)", display: "block", marginBottom: 4 }}>📅 تاريخ الانضمام</label>
             <input type="date" className="input-field" value={joinDate} onChange={e => setJoinDate(e.target.value)} />
           </div>
         </div>
+
+        {/* التليفون */}
         <div>
-          <label style={{ fontSize: 12, color: "var(--muted)", marginBottom: 4, display: "block" }}>نوع الاشتراك</label>
-          <select className="input-field" value={subType} onChange={e => setSubType(e.target.value)}>
-            {SUB_TYPES.map(s => <option key={s.label} value={s.label}>{s.icon} {s.label} - {s.price} جنيه</option>)}
-          </select>
+          <label style={{ fontSize: 11, color: "var(--muted)", display: "block", marginBottom: 4 }}>📞 تليفون ولي الأمر</label>
+          <input className="input-field" placeholder="01xxxxxxxxx" value={newPhone} onChange={e => setNewPhone(e.target.value)} />
         </div>
-        <button onClick={add} className="btn btn-primary btn-full">➕ إضافة اللاعب</button>
+
+        {/* الوزن والطول */}
+        <div className="grid-2">
+          <div>
+            <label style={{ fontSize: 11, color: "var(--muted)", display: "block", marginBottom: 4 }}>⚖️ الوزن (كجم)</label>
+            <input type="number" className="input-field" placeholder="65" value={newWeight} onChange={e => setNewWeight(e.target.value)} />
+          </div>
+          <div>
+            <label style={{ fontSize: 11, color: "var(--muted)", display: "block", marginBottom: 4 }}>📏 الطول (سم)</label>
+            <input type="number" className="input-field" placeholder="170" value={newHeight} onChange={e => setNewHeight(e.target.value)} />
+          </div>
+        </div>
+
+        {/* سداد القيد */}
+        <div style={{ display: "flex", alignItems: "center", gap: 10, background: "var(--surface2)", borderRadius: 12, padding: "10px 14px", marginBottom: 8 }}>
+          <div className={`checkbox-custom ${newRegFeePaid ? "checked" : ""}`} onClick={() => setNewRegFeePaid(!newRegFeePaid)}>
+            {newRegFeePaid && <span style={{ color: "white", fontSize: 13 }}>✓</span>}
+          </div>
+          <div>
+            <div style={{ fontWeight: 700, fontSize: 13 }}>سداد القيد الموسمي</div>
+            <div style={{ fontSize: 11, color: "var(--muted)" }}>هل سدد رسوم القيد؟</div>
+          </div>
+          <span className={`badge ${newRegFeePaid ? "badge-green" : "badge-red"}`} style={{ marginRight: "auto" }}>
+            {newRegFeePaid ? "مسدد ✅" : "لم يسدد"}
+          </span>
+        </div>
+
+        <button onClick={add} className="btn btn-primary btn-full" style={{ marginTop: 4 }}>➕ إضافة اللاعب</button>
       </div>
 
       <input className="input-field" placeholder="🔍 بحث..." value={search} onChange={e => setSearch(e.target.value)} />
@@ -1322,7 +1650,7 @@ function AdminPayments({ players, payments, setPayments }) {
 }
 
 // ─────────── Admin Events ───────────
-function AdminEvents({ events, setEvents, players, playerDetails, setPlayerDetails }) {
+function AdminEvents({ events, setEvents, players, playerDetails, setPlayerDetails, coaches }) {
   const [name, setName] = useState(""); const [date, setDate] = useState(getToday()); const [type, setType] = useState("exam");
   const [confirm, setConfirm] = useState(null);
 
@@ -1377,14 +1705,51 @@ function AdminEvents({ events, setEvents, players, playerDetails, setPlayerDetai
             </div>
             {registeredPlayers.length > 0 && (
               <div style={{ marginTop: 10, borderTop: "1px solid var(--border)", paddingTop: 10 }}>
-                <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 6 }}>المسجلون:</div>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                  <div style={{ fontSize: 12, color: "var(--muted)" }}>المسجلون ({registeredPlayers.length}):</div>
+                  <button onClick={() => {
+                    if (!window.XLSX) return showToast("جاري تحميل مكتبة الإكسل...", "info");
+                    const today = new Date();
+                    const data = registeredPlayers.map((p, idx) => {
+                      const pd = playerDetails[p.id] || {};
+                      const coach = coaches?.find(c => c.id === p.coachId);
+                      const age = pd.birthdate ? today.getFullYear() - new Date(pd.birthdate).getFullYear() : "---";
+                      return {
+                        "م": idx + 1,
+                        "اسم اللاعب": p.name,
+                        "المدرب": coach?.name || "---",
+                        "الحزام": pd.belt || "---",
+                        "تاريخ الميلاد": pd.birthdate || "---",
+                        "السن": age,
+                        "الوزن (كجم)": pd.weight || "---",
+                        "الطول (سم)": pd.height || "---",
+                        "نوع الاشتراك": pd.subType || "---",
+                        "سداد رسوم الفعالية": pd.feePaid ? "✅ مسدد" : "❌ لم يسدد",
+                        "سداد القيد": pd.regFeePaid ? "✅ مسدد" : "❌ لم يسدد",
+                        "تليفون ولي الأمر": pd.phone || "---",
+                        "تاريخ الانضمام": pd.joinDate || "---",
+                      };
+                    });
+                    const ws = window.XLSX.utils.json_to_sheet(data);
+                    // Set column widths
+                    ws['!cols'] = [
+                      {wch:4},{wch:20},{wch:15},{wch:12},{wch:14},{wch:6},
+                      {wch:10},{wch:10},{wch:16},{wch:18},{wch:14},{wch:16},{wch:14}
+                    ];
+                    const wb = window.XLSX.utils.book_new();
+                    window.XLSX.utils.book_append_sheet(wb, ws, ev.name.slice(0, 30));
+                    window.XLSX.writeFile(wb, `مشاركين_${ev.name}_${ev.date}.xlsx`);
+                    showToast(`تم تصدير بيانات ${registeredPlayers.length} لاعب ✅`, "success");
+                  }} className="btn btn-blue btn-sm">📥 تصدير إكسل</button>
+                </div>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                   {registeredPlayers.map(p => {
                     const pd = playerDetails[p.id] || {};
                     return (
                       <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 4 }}>
                         <span style={{ fontSize: 13, background: "var(--surface2)", padding: "3px 10px", borderRadius: 8 }}>{p.name}</span>
-                        {pd.feePaid && <span className="badge badge-green" style={{ fontSize: 10 }}>✅ مسدد قيد</span>}
+                        {pd.feePaid ? <span className="badge badge-green" style={{ fontSize: 10 }}>✅ مسدد</span> : <span className="badge badge-red" style={{ fontSize: 10 }}>❌ لم يسدد</span>}
+                        {pd.belt && <BeltBadge belt={pd.belt} />}
                       </div>
                     );
                   })}
@@ -1511,7 +1876,7 @@ function AdminLogs({ logs, setLogs }) {
 }
 
 // ─────────── Admin Reset ───────────
-function AdminReset({ attendance, setAttendance, payments, setPayments, logs, setLogs, players, coaches }) {
+function AdminReset({ attendance, setAttendance, payments, setPayments, logs, setLogs, players, coaches, playerDetails }) {
   const [confirm, setConfirm] = useState(null);
 
   const logAction = (action) => {
@@ -1571,6 +1936,63 @@ function AdminReset({ attendance, setAttendance, payments, setPayments, logs, se
           })} className="btn btn-yellow btn-full" style={{ color: "#000" }}>🌟 بدء شهر جديد</button>
         </div>
       </div>
+
+      {/* نسخة احتياطية */}
+      <div className="card" style={{ marginTop: 14 }}>
+        <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 4 }}>💾 نسخة احتياطية يدوية</div>
+        <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 12 }}>
+          احفظ بيانات النادي كاملة على جهازك
+          <br/><span style={{ color: "var(--accent)", fontSize: 11 }}>✅ النسخة الاحتياطية الأسبوعية تنزل تلقائياً كل 7 أيام</span>
+        </div>
+        <button onClick={() => {
+          const backup = { date: new Date().toISOString(), players, coaches, attendance, payments, playerDetails };
+          const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = `backup_talbia_${getToday()}.json`;
+          a.click();
+          URL.revokeObjectURL(url);
+          logAction("تم تصدير نسخة احتياطية يدوية");
+          showToast("تم تحميل النسخة الاحتياطية ✅", "success");
+        }} className="btn btn-blue btn-full" style={{ marginBottom: 8 }}>💾 تحميل نسخة احتياطية الآن</button>
+
+        <button onClick={() => {
+          const month = getToday().slice(0, 7);
+          generateMonthlyReport(players, coaches, attendance, payments, playerDetails, month);
+        }} className="btn btn-ghost btn-full" style={{ marginBottom: 8 }}>📊 تحميل تقرير الشهر الحالي</button>
+      </div>
+
+      {/* التقارير الشهرية السابقة */}
+      {(() => {
+        const reports = JSON.parse(localStorage.getItem("monthlyReports") || "[]");
+        if (!reports.length) return null;
+        return (
+          <div className="card" style={{ marginTop: 14 }}>
+            <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 12 }}>📁 التقارير الشهرية السابقة</div>
+            {reports.map((r, i) => (
+              <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: "1px solid var(--border)" }}>
+                <div>
+                  <div style={{ fontWeight: 700 }}>📊 تقرير {r.month}</div>
+                  <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 2 }}>
+                    {r.summary?.totalPlayers} لاعب · {r.summary?.activePlayers} نشط · {r.summary?.totalRevenue} جنيه
+                  </div>
+                </div>
+                <button onClick={() => {
+                  const blob = new Blob([JSON.stringify(r, null, 2)], { type: "application/json" });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement("a");
+                  a.href = url;
+                  a.download = `تقرير_${r.month}.json`;
+                  a.click();
+                  URL.revokeObjectURL(url);
+                  showToast(`تم تحميل تقرير ${r.month}`, "success");
+                }} className="btn btn-ghost btn-sm">📥 تحميل</button>
+              </div>
+            ))}
+          </div>
+        );
+      })()}
     </div>
   );
 }
@@ -1630,30 +2052,96 @@ function AdminLeaderboard({ players, coaches, attendance, payments, playerDetail
 }
 
 // ─────────── Admin Settings ───────────
+const DAYS_AR = ["الأحد","الاثنين","الثلاثاء","الأربعاء","الخميس","الجمعة","السبت"];
+
 function AdminSettings({ trainingSettings, setTrainingSettings, coaches }) {
-  const [localSettings, setLocalSettings] = useState(trainingSettings);
+  const [localSettings, setLocalSettings] = useState(trainingSettings || {});
+  const [selectedCoach, setSelectedCoach] = useState(coaches.filter(c=>!c.isAdmin)[0]?.id || "");
+
+  const getCoachSchedule = (coachId) => localSettings[coachId] || { days: [], sessions: {} };
+
+  const toggleDay = (coachId, dayIdx) => {
+    const schedule = getCoachSchedule(coachId);
+    const days = schedule.days.includes(dayIdx)
+      ? schedule.days.filter(d => d !== dayIdx)
+      : [...schedule.days, dayIdx].sort();
+    const newSched = { ...schedule, days };
+    setLocalSettings({ ...localSettings, [coachId]: newSched });
+  };
+
+  const setSessionTime = (coachId, dayIdx, field, val) => {
+    const schedule = getCoachSchedule(coachId);
+    const sessions = { ...schedule.sessions, [dayIdx]: { ...(schedule.sessions[dayIdx] || {}), [field]: val } };
+    setLocalSettings({ ...localSettings, [coachId]: { ...schedule, sessions } });
+  };
+
+  const coach = coaches.find(c => String(c.id) === String(selectedCoach));
+  const schedule = selectedCoach ? getCoachSchedule(selectedCoach) : null;
 
   return (
     <div>
-      <div className="section-title">⚙️ إعدادات النادي</div>
-      <div className="card">
-        <div style={{ fontWeight: 800, marginBottom: 12 }}>⏰ وقت التدريب</div>
-        <div className="grid-2">
-          <div>
-            <label style={{ fontSize: 12, color: "var(--muted)", display: "block", marginBottom: 4 }}>ساعة البداية</label>
-            <select className="input-field" value={localSettings.startHour} onChange={e => setLocalSettings({ ...localSettings, startHour: Number(e.target.value) })}>
-              {Array.from({ length: 24 }, (_, i) => <option key={i} value={i}>{i}:00</option>)}
-            </select>
+      <div className="section-title">⚙️ جداول التدريب</div>
+      <select className="input-field" value={selectedCoach} onChange={e => setSelectedCoach(e.target.value)}>
+        {coaches.filter(c => !c.isAdmin).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+      </select>
+
+      {coach && schedule && (
+        <div className="card">
+          <div style={{ fontWeight: 800, marginBottom: 12 }}>📅 أيام تدريب {coach.name}</div>
+          {/* اختيار الأيام */}
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 16 }}>
+            {DAYS_AR.map((day, idx) => (
+              <button key={idx} onClick={() => toggleDay(selectedCoach, idx)}
+                className={`btn btn-sm ${schedule.days.includes(idx) ? "btn-primary" : "btn-ghost"}`}>
+                {day}
+              </button>
+            ))}
           </div>
-          <div>
-            <label style={{ fontSize: 12, color: "var(--muted)", display: "block", marginBottom: 4 }}>المدة (دقيقة)</label>
-            <select className="input-field" value={localSettings.duration} onChange={e => setLocalSettings({ ...localSettings, duration: Number(e.target.value) })}>
-              {[60, 90, 120, 150, 180].map(d => <option key={d} value={d}>{d} دقيقة</option>)}
-            </select>
-          </div>
+          {/* وقت كل يوم */}
+          {schedule.days.map(dayIdx => (
+            <div key={dayIdx} className="card" style={{ marginBottom: 8, padding: 12 }}>
+              <div style={{ fontWeight: 700, marginBottom: 8, color: "var(--accent)" }}>📅 {DAYS_AR[dayIdx]}</div>
+              <div className="grid-2">
+                <div>
+                  <label style={{ fontSize: 11, color: "var(--muted)", display: "block", marginBottom: 4 }}>وقت البداية</label>
+                  <select className="input-field" style={{ marginBottom: 0 }}
+                    value={schedule.sessions[dayIdx]?.startHour ?? 17}
+                    onChange={e => setSessionTime(selectedCoach, dayIdx, "startHour", Number(e.target.value))}>
+                    {Array.from({ length: 24 }, (_, i) => <option key={i} value={i}>{i}:00</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label style={{ fontSize: 11, color: "var(--muted)", display: "block", marginBottom: 4 }}>المدة</label>
+                  <select className="input-field" style={{ marginBottom: 0 }}
+                    value={schedule.sessions[dayIdx]?.duration ?? 60}
+                    onChange={e => setSessionTime(selectedCoach, dayIdx, "duration", Number(e.target.value))}>
+                    {[60, 90, 120].map(d => <option key={d} value={d}>{d} دقيقة</option>)}
+                  </select>
+                </div>
+              </div>
+            </div>
+          ))}
+          <button onClick={() => { setTrainingSettings(localSettings); showToast(`تم حفظ جدول ${coach.name} ✅`, "success"); }} className="btn btn-primary btn-full">💾 حفظ الجدول</button>
         </div>
-        <button onClick={() => { setTrainingSettings(localSettings); showToast("تم حفظ إعدادات التدريب ✅", "success"); }} className="btn btn-primary btn-full">💾 حفظ الإعدادات</button>
-      </div>
+      )}
+
+      {/* عرض جداول كل المدربين */}
+      <div className="section-title" style={{ marginTop: 16 }}>📋 ملخص الجداول</div>
+      {coaches.filter(c => !c.isAdmin).map(c => {
+        const sch = getCoachSchedule(c.id);
+        return sch.days.length > 0 ? (
+          <div key={c.id} className="player-row" style={{ padding: "10px 14px" }}>
+            <div style={{ fontWeight: 700, marginBottom: 4 }}>🥋 {c.name}</div>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              {sch.days.map(d => (
+                <span key={d} className="badge badge-blue">
+                  {DAYS_AR[d]} {sch.sessions[d]?.startHour ?? 17}:00
+                </span>
+              ))}
+            </div>
+          </div>
+        ) : null;
+      })}
     </div>
   );
 }
@@ -1678,20 +2166,51 @@ function CoachView({ coach, players, setPlayers, attendance, setAttendance, paym
 
   return (
     <div>
-      {/* تذكير موعد التدريب */}
+      {/* تذكير موعد التدريب - مخصص لكل مدرب */}
       {(() => {
         const now = new Date();
         const hour = now.getHours();
-        const startH = trainingSettings?.startHour || 17;
-        const endH = startH + Math.floor((trainingSettings?.duration || 90) / 60);
+        const todayIdx = now.getDay();
+        const coachSched = trainingSettings?.[coach.id];
+        if (!coachSched) return null;
+        const session = coachSched.sessions?.[todayIdx];
+        if (!coachSched.days?.includes(todayIdx) || !session) return null;
+        const startH = session.startHour ?? 17;
+        const endH = startH + Math.floor((session.duration ?? 60) / 60);
         const isTrainingTime = hour >= startH - 1 && hour <= endH;
         if (!isTrainingTime) return null;
+        const DAYS_AR_LOCAL = ["الأحد","الاثنين","الثلاثاء","الأربعاء","الخميس","الجمعة","السبت"];
         return (
           <div className="card" style={{ borderColor: "var(--accent)", background: "rgba(0,212,170,0.05)", marginBottom: 10, textAlign: "center" }}>
-            <div style={{ fontSize: 24, marginBottom: 4 }}>⏰</div>
+            <div style={{ fontSize: 28, marginBottom: 4 }}>⏰</div>
             <div style={{ fontWeight: 800, color: "var(--accent)", fontSize: 15 }}>
-              {hour < startH ? `التدريب بعد ساعة! (${startH}:00)` : "وقت التدريب دلوقتي! 💪"}
+              {hour < startH ? `تدريب ${DAYS_AR_LOCAL[todayIdx]} بعد شوية! (${startH}:00) 💪` : `وقت التدريب دلوقتي! يلا يا كابتن 🔥`}
             </div>
+            <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 4 }}>المدة: {session.duration ?? 60} دقيقة</div>
+          </div>
+        );
+      })()}
+
+      {/* اقتراحات ذكية */}
+      {(() => {
+        const suggestions = [];
+        myPlayers.forEach(p => {
+          const att = getDetailedAttendance(p.id, coach.id, attendance);
+          const pd = playerDetails[p.id] || {};
+          if (att.count <= 2 && att.count > 0) suggestions.push({ name: p.name, msg: "محتاج تشجيع — حضر أقل من 3 أيام 💪", color: "var(--orange)" });
+          if (att.percentage === 100 && att.count >= 8) suggestions.push({ name: p.name, msg: "أداء ممتاز — يستاهل مكافأة ⭐", color: "var(--accent)" });
+          if (!checkSubStatus(payments[p.id]?.date).valid && att.count > 5) suggestions.push({ name: p.name, msg: "منتظم في الحضور لكن الاشتراك منتهي — تذكيره 📞", color: "var(--yellow)" });
+        });
+        if (!suggestions.length) return null;
+        return (
+          <div className="card" style={{ marginBottom: 10, borderColor: "var(--accent2)", background: "rgba(0,153,255,0.04)" }}>
+            <div style={{ fontWeight: 800, color: "var(--accent2)", marginBottom: 8, fontSize: 13 }}>🤖 اقتراحات ذكية</div>
+            {suggestions.slice(0, 3).map((s, i) => (
+              <div key={i} style={{ display: "flex", gap: 8, padding: "6px 0", borderBottom: "1px solid var(--border)", alignItems: "center" }}>
+                <span style={{ fontSize: 11, color: s.color, fontWeight: 700, minWidth: 70 }}>{s.name}</span>
+                <span style={{ fontSize: 11, color: "var(--muted2)" }}>{s.msg}</span>
+              </div>
+            ))}
           </div>
         );
       })()}
@@ -1896,6 +2415,7 @@ function CoachView({ coach, players, setPlayers, attendance, setAttendance, paym
               </div>
               <DonutChart value={att.percentage} max={100} color={att.percentage >= 75 ? "var(--accent)" : att.percentage >= 50 ? "var(--yellow)" : "var(--red)"} size={54} />
             </div>
+            <AttendanceHeatmap playerId={p.id} coachId={coach.id} attendance={attendance} />
             <div className="progress-bar" style={{ width: `${att.percentage}%` }} />
           </div>
         );
