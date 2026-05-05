@@ -19,13 +19,16 @@ const getToday = () => new Date().toISOString().split("T")[0];
 
 const BELTS = [
   { label: "أبيض", color: "#f0f0f0", textColor: "#000" },
-  { label: "أصفر", color: "#FFD700", textColor: "#000" },
-  { label: "برتقالي", color: "#FF8C00", textColor: "#fff" },
-  { label: "أخضر", color: "#228B22", textColor: "#fff" },
-  { label: "أزرق", color: "#1E90FF", textColor: "#fff" },
-  { label: "بنفسجي", color: "#800080", textColor: "#fff" },
-  { label: "بني", color: "#8B4513", textColor: "#fff" },
-  { label: "أحمر", color: "#DC143C", textColor: "#fff" },
+  { label: "(10)أصفر", color: "#FFD700", textColor: "#000" },
+    { label: "أصفر(9)", color: "#FFD702", textColor: "#000" },
+  { label: "برتقالي(8)", color: "#FF8C00", textColor: "#fff" },
+  { label: "برتقالي(7)", color: "#FF8C02", textColor: "#fff" },
+  { label: "أخضر(6)", color: "#228B22", textColor: "#fff" },
+  { label: "أخضر(5)", color: "#228B25", textColor: "#fff" },
+  { label: "أزرق(4)", color: "#1E90FF", textColor: "#fff" },
+  { label: "أزرق(3)", color: "#1E95FF", textColor: "#fff" },
+  { label: "بني(2)", color: "#8B4513", textColor: "#fff" },
+  { label: "بني(1)", color: "#8B4517", textColor: "#fff" },
   { label: "أسود", color: "#1a1a1a", textColor: "#fff" },
 ];
 
