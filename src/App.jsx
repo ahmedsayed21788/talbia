@@ -19,16 +19,13 @@ const getToday = () => new Date().toISOString().split("T")[0];
 
 const BELTS = [
   { label: "أبيض", color: "#f0f0f0", textColor: "#000" },
-  { label: "(10)أصفر", color: "#FFD700", textColor: "#000" },
-    { label: "أصفر(9)", color: "#FFD702", textColor: "#000" },
-  { label: "برتقالي(8)", color: "#FF8C00", textColor: "#fff" },
-  { label: "برتقالي(7)", color: "#FF8C02", textColor: "#fff" },
-  { label: "أخضر(6)", color: "#228B22", textColor: "#fff" },
-  { label: "أخضر(5)", color: "#228B25", textColor: "#fff" },
-  { label: "أزرق(4)", color: "#1E90FF", textColor: "#fff" },
-  { label: "أزرق(3)", color: "#1E95FF", textColor: "#fff" },
-  { label: "بني(2)", color: "#8B4513", textColor: "#fff" },
-  { label: "بني(1)", color: "#8B4517", textColor: "#fff" },
+  { label: "أصفر", color: "#FFD700", textColor: "#000" },
+  { label: "برتقالي", color: "#FF8C00", textColor: "#fff" },
+  { label: "أخضر", color: "#228B22", textColor: "#fff" },
+  { label: "أزرق", color: "#1E90FF", textColor: "#fff" },
+  { label: "بنفسجي", color: "#800080", textColor: "#fff" },
+  { label: "بني", color: "#8B4513", textColor: "#fff" },
+  { label: "أحمر", color: "#DC143C", textColor: "#fff" },
   { label: "أسود", color: "#1a1a1a", textColor: "#fff" },
 ];
 
@@ -713,6 +710,11 @@ const coachTaunts = {
     "يا عم عمر... انت عارف إنك حبيبنا؟ بس متقولش لحد قلنالك!",
     "عمر أفندي! التطبيق بيقولك أهلاً وسهلاً... وبيقولك كمان اعمل القهوة الأول!",
   ],
+  "ANAS": [
+    "أنس! يا أنس! آه انت هنا... كنت فاكر التليفون فتح لوحده!",
+    "يا عم أنس... انت عارف إن اسمك قصير؟ ده بيريّح... شكراً!",
+    "أنس أفندي! التطبيق بيقولك أهلاً... وبيقولك كمان تشرب مية!",
+  ],
 };
 
 
@@ -792,7 +794,7 @@ export default function App() {
     document.body.appendChild(script);
 
     const fetchData = async () => {
-      const adminData = [{ id: 100, username: "admin", password: "2201", name: "المدير الإدارى", isAdmin: true }];
+      const adminData = [{ id: 100, username: "admin", password: "2201", name: "المدير العام", isAdmin: true }];
       try {
         const [cSnap, pSnap, aSnap, paySnap, nSnap, pdSnap, evSnap, logsSnap, pExtraSnap, trainSnap] = await Promise.all([
           getDoc(doc(db, "clubData", "coaches")),
@@ -878,7 +880,7 @@ export default function App() {
           <div className="header-bar">
             <div>
               <div style={{ fontWeight: 800, fontSize: 15 }}>{user.name}</div>
-              <small style={{ color: "var(--muted)", fontSize: 11 }}>{user.isAdmin ? "🛡 مدير الادارى" : "🥋 مدرب"}</small>
+              <small style={{ color: "var(--muted)", fontSize: 11 }}>{user.isAdmin ? "🛡 مدير النادي" : "🥋 مدرب"}</small>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <img src="/logo192.png" alt="logo" style={{ width: 28, height: 28, objectFit: "contain", borderRadius: 6 }} />
@@ -2195,6 +2197,7 @@ function CoachView({ coach, players, setPlayers, attendance, setAttendance, paym
           if (att.count <= 2 && att.count > 0) suggestions.push({ name: p.name, msg: "محتاج تشجيع — حضر أقل من 3 أيام 💪", color: "var(--orange)" });
           if (att.percentage === 100 && att.count >= 8) suggestions.push({ name: p.name, msg: "أداء ممتاز — يستاهل مكافأة ⭐", color: "var(--accent)" });
           if (!checkSubStatus(payments[p.id]?.date).valid && att.count > 5) suggestions.push({ name: p.name, msg: "منتظم في الحضور لكن الاشتراك منتهي — تذكيره 📞", color: "var(--yellow)" });
+          if (pd.rating && pd.rating >= 4 && att.count < 5) suggestions.push({ name: p.name, msg: "تقييمه عالي بس حضوره قليل — يحتاج متابعة 🎯", color: "var(--accent2)" });
         });
         if (!suggestions.length) return null;
         return (
