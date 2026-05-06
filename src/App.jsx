@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { initializeApp } from "firebase/app";
 import { getFirestore, doc, setDoc, getDoc } from "firebase/firestore";
 
@@ -31,7 +31,6 @@ const BELTS = [
   { label: "بني(1)", color: "#8B4517", textColor: "#fff" },
   { label: "أسود", color: "#1a1a1a", textColor: "#fff" },
 ];
-
 
 const SUB_TYPES = [
   { label: "أخوات (اتنين)", price: 135, color: "#7c3aed", icon: "👫" },
@@ -210,6 +209,67 @@ const generateMonthlyReport = (players, coaches, attendance, payments, playerDet
   a.click();
   URL.revokeObjectURL(url);
   showToast(`📊 تم تحميل تقرير شهر ${month} ✅`, "success");
+};
+
+
+// ─────────── شهادة رقمية ───────────
+const generateCertificate = (playerName, belt, coachName, eventName) => {
+  const html = `
+    <!DOCTYPE html>
+    <html dir="rtl">
+    <head>
+      <meta charset="UTF-8"/>
+      <style>
+        @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700;900&display=swap');
+        body { margin: 0; background: #060b14; display: flex; align-items: center; justify-content: center; min-height: 100vh; font-family: 'Tajawal', sans-serif; }
+        .cert { width: 800px; padding: 60px; background: linear-gradient(135deg, #0c1525, #152040); border: 3px solid #ffc300; border-radius: 20px; text-align: center; color: white; position: relative; }
+        .cert::before { content: ''; position: absolute; inset: 8px; border: 1px solid rgba(255,195,0,0.3); border-radius: 14px; pointer-events: none; }
+        .logo { font-size: 60px; margin-bottom: 10px; }
+        .club { font-size: 28px; font-weight: 900; color: #00d4aa; margin-bottom: 4px; }
+        .title { font-size: 20px; color: #ffc300; margin: 20px 0; letter-spacing: 3px; }
+        .name { font-size: 42px; font-weight: 900; color: white; margin: 10px 0; text-shadow: 0 0 20px rgba(0,212,170,0.5); }
+        .belt { font-size: 18px; color: #0099ff; margin: 10px 0; }
+        .event { font-size: 16px; color: #e8edf5; margin: 20px 0; opacity: 0.8; }
+        .coach { font-size: 14px; color: #4a6080; margin-top: 30px; }
+        .date { font-size: 13px; color: #4a6080; margin-top: 8px; }
+        .stars { color: #ffc300; font-size: 24px; margin: 10px 0; }
+        @media print { body { background: white; } .cert { border-color: #gold; } }
+      </style>
+    </head>
+    <body>
+      <div class="cert">
+        <div class="logo">🥋</div>
+        <div class="club">نادي الطالبية</div>
+        <div class="title">شـهـادة تـقـدير</div>
+        <div class="stars">★ ★ ★ ★ ★</div>
+        <p style="color:#4a6080;font-size:16px">يُشهد بأن</p>
+        <div class="name">${playerName}</div>
+        <div class="belt">🥋 حزام ${belt}</div>
+        <div class="event">قد اجتاز بنجاح ${eventName}</div>
+        <div class="coach">تحت إشراف المدرب: ${coachName}</div>
+        <div class="date">📅 ${new Date().toLocaleDateString('ar-EG', {year:'numeric',month:'long',day:'numeric'})}</div>
+      </div>
+    </body>
+    </html>
+  `;
+  const w = window.open("", "_blank");
+  w.document.write(html);
+  w.document.close();
+  setTimeout(() => w.print(), 800);
+};
+
+// ─────────── ذكرى الانضمام ───────────
+const getAnniversaryAlerts = (players, playerDetails) => {
+  const today = new Date();
+  return players.filter(p => {
+    const pd = playerDetails[p.id] || {};
+    if (!pd.joinDate) return false;
+    const join = new Date(pd.joinDate);
+    return join.getDate() === today.getDate() && join.getMonth() === today.getMonth() && join.getFullYear() !== today.getFullYear();
+  }).map(p => {
+    const years = today.getFullYear() - new Date(playerDetails[p.id].joinDate).getFullYear();
+    return { ...p, years };
+  });
 };
 
 // ─────────── واتساب شير ───────────
@@ -789,6 +849,21 @@ export default function App() {
   const [playerExtra, setPlayerExtra] = useState({});
   const [trainingSettings, setTrainingSettings] = useState({ startHour: 17, duration: 90 });
   const [darkMode, setDarkMode] = useState(true);
+  const lastActivityRef = useRef(Date.now());
+
+  // تسجيل خروج تلقائي بعد 30 دقيقة
+  useEffect(() => {
+    const updateActivity = () => { lastActivityRef.current = Date.now(); };
+    window.addEventListener('click', updateActivity);
+    window.addEventListener('keypress', updateActivity);
+    const interval = setInterval(() => {
+      if (user && Date.now() - lastActivityRef.current > 30 * 60 * 1000) {
+        setUser(null);
+        showToast("تم تسجيل الخروج تلقائياً بسبب عدم النشاط", "info");
+      }
+    }, 60000);
+    return () => { window.removeEventListener('click', updateActivity); window.removeEventListener('keypress', updateActivity); clearInterval(interval); };
+  }, [user]);
 
   useEffect(() => {
     const script = document.createElement("script");
@@ -797,7 +872,7 @@ export default function App() {
     document.body.appendChild(script);
 
     const fetchData = async () => {
-      const adminData = [{ id: 100, username: "admin", password: "2201", name: "المدير العام", isAdmin: true }];
+      const adminData = [{ id: 100, username: "admin", password: "2201", name: "المدير الإدارى", isAdmin: true }];
       try {
         const [cSnap, pSnap, aSnap, paySnap, nSnap, pdSnap, evSnap, logsSnap, pExtraSnap, trainSnap] = await Promise.all([
           getDoc(doc(db, "clubData", "coaches")),
@@ -883,11 +958,14 @@ export default function App() {
           <div className="header-bar">
             <div>
               <div style={{ fontWeight: 800, fontSize: 15 }}>{user.name}</div>
-              <small style={{ color: "var(--muted)", fontSize: 11 }}>{user.isAdmin ? "🛡 مدير النادي" : "🥋 مدرب"}</small>
+              <small style={{ color: "var(--muted)", fontSize: 11 }}>{user.isAdmin ? "🛡 المدير الإدارى" : "🥋 مدرب"}</small>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <img src="/logo192.png" alt="logo" style={{ width: 28, height: 28, objectFit: "contain", borderRadius: 6 }} />
-              <div className="logo-text">الطالبية</div>
+              <div>
+                <div className="logo-text">الطالبية</div>
+                <div style={{ fontSize: 9, color: "var(--muted)", marginTop: -2 }}>by Ahmed Sayed</div>
+              </div>
             </div>
             <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
               <ThemeToggle darkMode={darkMode} setDarkMode={setDarkMode} />
@@ -919,7 +997,8 @@ export default function App() {
                 events={events}
                 logs={logs} setLogs={(d) => { setLogs(d); save("logs", d); }}
                 playerExtra={playerExtra} setPlayerExtra={(d) => { setPlayerExtra(d); save("playerExtra", d); }}
-                trainingSettings={trainingSettings} setTrainingSettings={(d) => { setTrainingSettings(d); save("trainingSettings", d); }}
+                trainingSettings={trainingSettings}
+                coaches={coaches} setCoaches={(d) => { setCoaches(d); save("coaches", d); }} setTrainingSettings={(d) => { setTrainingSettings(d); save("trainingSettings", d); }}
               />
             )}
           </div>
@@ -984,6 +1063,16 @@ function LoginPage({ coaches, onLogin }) {
             }
             else { showToast("اسم المستخدم أو كلمة المرور خطأ", "error"); }
           }} className="btn btn-primary btn-full" style={{ marginTop: 4, padding: 14 }}>دخول</button>
+        </div>
+        {/* Developer Credit */}
+        <div style={{ textAlign: "center", marginTop: 24, padding: "12px 0" }}>
+          <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 6 }}>تم التطوير بواسطة</div>
+          <div style={{ fontWeight: 800, fontSize: 14, color: "var(--accent2)" }}>Ahmed Sayed</div>
+          <a href="https://wa.me/201142126158" target="_blank" rel="noreferrer"
+            style={{ display: "inline-flex", alignItems: "center", gap: 6, marginTop: 6, padding: "6px 14px", background: "#25D36622", border: "1px solid #25D36644", borderRadius: 20, textDecoration: "none" }}>
+            <span style={{ fontSize: 14 }}>📱</span>
+            <span style={{ fontSize: 12, color: "#25D366", fontWeight: 700 }}>01142126158</span>
+          </a>
         </div>
       </div>
     </div>
@@ -1075,6 +1164,36 @@ function AdminMainDashboard({ coaches, players, attendance, payments, events, pl
         </div>
       </div>
 
+      {/* أفضل 3 لاعبين */}
+      {players.length > 0 && (() => {
+        const top3 = [...players]
+          .map(p => ({ ...p, att: getDetailedAttendance(p.id, p.coachId, attendance) }))
+          .sort((a, b) => b.att.count - a.att.count)
+          .slice(0, 3);
+        const medals = ["🥇", "🥈", "🥉"];
+        const colors = ["#FFD700", "#C0C0C0", "#CD7F32"];
+        return (
+          <div className="card" style={{ marginBottom: 14 }}>
+            <div className="section-title">🏆 أفضل 3 لاعبين حضوراً</div>
+            {top3.map((p, i) => (
+              <div key={p.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: i < 2 ? "1px solid var(--border)" : "none" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <span style={{ fontSize: 22 }}>{medals[i]}</span>
+                  <div>
+                    <div style={{ fontWeight: 700 }}>{p.name}</div>
+                    <div style={{ fontSize: 11, color: "var(--muted)" }}>{coaches.find(c => c.id === p.coachId)?.name || "---"}</div>
+                  </div>
+                </div>
+                <div style={{ textAlign: "center" }}>
+                  <div style={{ fontWeight: 900, color: colors[i], fontSize: 18 }}>{p.att.count}</div>
+                  <div style={{ fontSize: 10, color: "var(--muted)" }}>يوم</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        );
+      })()}
+
       {/* Belts distribution */}
       {beltCounts.some(b => b.value > 0) && (
         <div className="card" style={{ marginBottom: 14 }}>
@@ -1090,6 +1209,23 @@ function AdminMainDashboard({ coaches, players, attendance, payments, events, pl
           </div>
         </div>
       )}
+
+      {/* ذكرى الانضمام */}
+      {(() => {
+        const anniversaries = getAnniversaryAlerts(players, playerDetails);
+        if (!anniversaries.length) return null;
+        return (
+          <div className="card" style={{ borderColor: "var(--accent2)", background: "rgba(0,153,255,0.05)", marginBottom: 14, textAlign: "center" }}>
+            <div style={{ fontSize: 28, marginBottom: 6 }}>🎊</div>
+            <div style={{ fontWeight: 800, color: "var(--accent2)", marginBottom: 8 }}>ذكرى انضمام!</div>
+            {anniversaries.map(p => (
+              <div key={p.id} style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>
+                🎉 {p.name} — {p.years} {p.years === 1 ? "سنة" : "سنوات"} في النادي!
+              </div>
+            ))}
+          </div>
+        );
+      })()}
 
       {/* أعياد الميلاد النهارده */}
       {(() => {
@@ -1223,6 +1359,7 @@ function AdminMainDashboard({ coaches, players, attendance, payments, events, pl
 // ─────────── Admin Reports ───────────
 function AdminReports({ coaches, players, attendance, payments, playerDetails }) {
   const [search, setSearch] = useState("");
+  const [coachFilter, setCoachFilter] = useState("all");
 
   const exportExcel = () => {
     if (!window.XLSX) return showToast("جاري تحميل مكتبة الإكسل...", "info");
@@ -1294,9 +1431,15 @@ function AdminReports({ coaches, players, attendance, payments, playerDetails })
           shareWhatsApp(lines);
         }} className="btn btn-primary" style={{ flex: 1 }}>📤 واتساب</button>
       </div>
-      <input className="input-field" placeholder="🔍 بحث باسم اللاعب..." onChange={e => setSearch(e.target.value)} />
+      <div className="grid-2" style={{ marginBottom: 8 }}>
+        <input className="input-field" style={{ marginBottom: 0 }} placeholder="🔍 بحث باسم اللاعب..." onChange={e => setSearch(e.target.value)} />
+        <select className="input-field" style={{ marginBottom: 0 }} value={coachFilter} onChange={e => setCoachFilter(e.target.value)}>
+          <option value="all">🥋 كل المدربين</option>
+          {coaches.filter(c => !c.isAdmin).map(c => <option key={c.id} value={String(c.id)}>{c.name}</option>)}
+        </select>
+      </div>
 
-      {players.filter(p => p.name.includes(search)).map(p => {
+      {players.filter(p => p.name.includes(search) && (coachFilter === "all" || String(p.coachId) === coachFilter)).map(p => {
         const att = getDetailedAttendance(p.id, p.coachId, attendance);
         const sub = checkSubStatus(payments[p.id]?.date);
         const coach = coaches.find(c => c.id === p.coachId);
@@ -1745,11 +1888,14 @@ function AdminEvents({ events, setEvents, players, playerDetails, setPlayerDetai
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                   {registeredPlayers.map(p => {
                     const pd = playerDetails[p.id] || {};
+                    const coach = coaches?.find(c => c.id === p.coachId);
                     return (
-                      <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                        <span style={{ fontSize: 13, background: "var(--surface2)", padding: "3px 10px", borderRadius: 8 }}>{p.name}</span>
+                      <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap", padding: "4px 0", borderBottom: "1px solid var(--border)" }}>
+                        <span style={{ fontSize: 13, fontWeight: 700, flex: 1 }}>{p.name}</span>
                         {pd.feePaid ? <span className="badge badge-green" style={{ fontSize: 10 }}>✅ مسدد</span> : <span className="badge badge-red" style={{ fontSize: 10 }}>❌ لم يسدد</span>}
                         {pd.belt && <BeltBadge belt={pd.belt} />}
+                        <button onClick={() => generateCertificate(p.name, pd.belt || "أبيض", coach?.name || "---", ev.name)}
+                          className="btn btn-yellow btn-xs" style={{ color: "#000" }}>📜 شهادة</button>
                       </div>
                     );
                   })}
@@ -1935,6 +2081,22 @@ function AdminReset({ attendance, setAttendance, payments, setPayments, logs, se
             }
           })} className="btn btn-yellow btn-full" style={{ color: "#000" }}>🌟 بدء شهر جديد</button>
         </div>
+      </div>
+
+      {/* عن المطور */}
+      <div className="card" style={{ marginTop: 14, textAlign: "center", borderColor: "var(--accent2)", background: "rgba(0,153,255,0.04)" }}>
+        <div style={{ fontSize: 32, marginBottom: 8 }}>👨‍💻</div>
+        <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 4 }}>عن التطبيق</div>
+        <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 12 }}>
+          تم تطوير هذا التطبيق خصيصاً لنادي الطالبية
+        </div>
+        <div style={{ fontWeight: 800, color: "var(--accent2)", fontSize: 16, marginBottom: 8 }}>Ahmed Sayed</div>
+        <a href="https://wa.me/201142126158" target="_blank" rel="noreferrer"
+          style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "10px 20px", background: "#25D36622", border: "1px solid #25D36644", borderRadius: 12, textDecoration: "none" }}>
+          <span style={{ fontSize: 18 }}>📱</span>
+          <span style={{ color: "#25D366", fontWeight: 800, fontSize: 14 }}>01142126158</span>
+        </a>
+        <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 10 }}>للتواصل والدعم الفني</div>
       </div>
 
       {/* نسخة احتياطية */}
@@ -2146,8 +2308,43 @@ function AdminSettings({ trainingSettings, setTrainingSettings, coaches }) {
   );
 }
 
+
+// ─────────── تغيير الباسورد ───────────
+function ChangePassword({ coach, coaches, setCoaches }) {
+  const [oldPass, setOldPass] = useState("");
+  const [newPass, setNewPass] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [show, setShow] = useState(false);
+
+  const handleChange = () => {
+    if (oldPass !== coach.password) return showToast("كلمة المرور القديمة غلط ❌", "error");
+    if (newPass.length < 4) return showToast("كلمة المرور الجديدة أقل من 4 أرقام", "error");
+    if (newPass !== confirm) return showToast("كلمة المرور الجديدة مش متطابقة ❌", "error");
+    setCoaches(coaches.map(c => c.id === coach.id ? { ...c, password: newPass } : c));
+    showToast("تم تغيير كلمة المرور بنجاح ✅", "success");
+    setOldPass(""); setNewPass(""); setConfirm(""); setShow(false);
+  };
+
+  return (
+    <div className="card" style={{ marginBottom: 14 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div style={{ fontWeight: 800, fontSize: 14 }}>🔐 تغيير كلمة المرور</div>
+        <button onClick={() => setShow(!show)} className="btn btn-ghost btn-sm">{show ? "إغلاق" : "تغيير"}</button>
+      </div>
+      {show && (
+        <div style={{ marginTop: 12 }}>
+          <input className="input-field" type="password" placeholder="كلمة المرور القديمة" value={oldPass} onChange={e => setOldPass(e.target.value)} />
+          <input className="input-field" type="password" placeholder="كلمة المرور الجديدة" value={newPass} onChange={e => setNewPass(e.target.value)} />
+          <input className="input-field" type="password" placeholder="تأكيد كلمة المرور" value={confirm} onChange={e => setConfirm(e.target.value)} />
+          <button onClick={handleChange} className="btn btn-primary btn-full">💾 حفظ</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ═══════════════════════════════ COACH VIEW ═══════════════════════
-function CoachView({ coach, players, setPlayers, attendance, setAttendance, payments, notes, setNotes, playerDetails, setPlayerDetails, events, logs, setLogs, playerExtra, setPlayerExtra, trainingSettings }) {
+function CoachView({ coach, players, setPlayers, attendance, setAttendance, payments, notes, setNotes, playerDetails, setPlayerDetails, events, logs, setLogs, playerExtra, setPlayerExtra, trainingSettings, coaches, setCoaches }) {
   const [tab, setTab] = useState("today");
   const [newName, setNewName] = useState("");
   const [selectedDate, setSelectedDate] = useState(getToday());
@@ -2262,6 +2459,8 @@ function CoachView({ coach, players, setPlayers, attendance, setAttendance, paym
           }} className="btn btn-primary btn-sm">إضافة</button>
         </div>
       </div>
+
+      <ChangePassword coach={coach} coaches={coaches} setCoaches={setCoaches} />
 
       <div className="tab-bar">
         {[["today", "📋 تحضير"], ["reports", "📊 تقارير"], ["notes", "📝 ملاحظات"], ["events", "🏆 فعاليات"]].map(([k, l]) => (
