@@ -3,13 +3,13 @@ import { initializeApp } from "firebase/app";
 import { getFirestore, doc, setDoc, getDoc } from "firebase/firestore";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyCZWM-r42zo_-8o_ve4CU9q_Qs06EuesXg",
-  authDomain: "talbia-app.firebaseapp.com",
-  projectId: "talbia-app",
-  storageBucket: "talbia-app.firebasestorage.app",
-  messagingSenderId: "70097632377",
-  appId: "1:70097632377:web:384030acbe430966b8e8a8",
-  measurementId: "G-3TZKBEX2RV"
+  apiKey: "AIzaSyCtLUMqhDA-0onHdHoJh3nUP_NgOTHaAd8",
+  authDomain: "talbia-6cc1d.firebaseapp.com",
+  projectId: "talbia-6cc1d",
+  storageBucket: "talbia-6cc1d.firebasestorage.app",
+  messagingSenderId: "782962151275",
+  appId: "1:782962151275:web:bbd0394e148e2c87c8862e",
+  measurementId: "G-M4M28869RT"
 };
 
 const app = initializeApp(firebaseConfig);
@@ -31,6 +31,7 @@ const BELTS = [
   { label: "بني(1)", color: "#8B4517", textColor: "#fff" },
   { label: "أسود", color: "#1a1a1a", textColor: "#fff" },
 ];
+
 
 const SUB_TYPES = [
   { label: "أخوات (اتنين)", price: 135, color: "#7c3aed", icon: "👫" },
@@ -872,7 +873,7 @@ export default function App() {
     document.body.appendChild(script);
 
     const fetchData = async () => {
-      const adminData = [{ id: 100, username: "admin", password: "2201", name: "المدير الإدارى", isAdmin: true }];
+      const adminData = [{ id: 100, username: "admin", password: "2201", name: "المدير العام", isAdmin: true }];
       try {
         const [cSnap, pSnap, aSnap, paySnap, nSnap, pdSnap, evSnap, logsSnap, pExtraSnap, trainSnap] = await Promise.all([
           getDoc(doc(db, "clubData", "coaches")),
@@ -958,7 +959,7 @@ export default function App() {
           <div className="header-bar">
             <div>
               <div style={{ fontWeight: 800, fontSize: 15 }}>{user.name}</div>
-              <small style={{ color: "var(--muted)", fontSize: 11 }}>{user.isAdmin ? "🛡 المدير الإدارى" : "🥋 مدرب"}</small>
+              <small style={{ color: "var(--muted)", fontSize: 11 }}>{user.isAdmin ? "🛡 مدير النادي" : "🥋 مدرب"}</small>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <img src="/logo192.png" alt="logo" style={{ width: 28, height: 28, objectFit: "contain", borderRadius: 6 }} />
@@ -1531,6 +1532,12 @@ function AdminPlayers({ coaches, players, setPlayers, playerDetails, setPlayerDe
   const [search, setSearch] = useState("");
   const [confirm, setConfirm] = useState(null);
   const [editId, setEditId] = useState(null);
+  const [filterCoach, setFilterCoach] = useState("all");
+  const [transferMode, setTransferMode] = useState(false);
+  const [selectedPlayers, setSelectedPlayers] = useState([]);
+  const [targetCoach, setTargetCoach] = useState("");
+  const [copyMode, setCopyMode] = useState(false);
+  const [importError, setImportError] = useState("");
 
   const add = () => {
     if (n && cId) {
@@ -1548,7 +1555,7 @@ function AdminPlayers({ coaches, players, setPlayers, playerDetails, setPlayerDe
     } else showToast("يرجى ملء الاسم واختيار المدرب", "error");
   };
 
-  const filtered = players.filter(p => p.name.includes(search));
+  const filtered = players.filter(p => p.name.includes(search) && (filterCoach === "all" || String(p.coachId) === filterCoach));
 
   return (
     <div>
@@ -1635,7 +1642,126 @@ function AdminPlayers({ coaches, players, setPlayers, playerDetails, setPlayerDe
         <button onClick={add} className="btn btn-primary btn-full" style={{ marginTop: 4 }}>➕ إضافة اللاعب</button>
       </div>
 
-      <input className="input-field" placeholder="🔍 بحث..." value={search} onChange={e => setSearch(e.target.value)} />
+      {/* فلتر + بحث */}
+      <div className="grid-2" style={{ marginBottom: 8 }}>
+        <input className="input-field" style={{ marginBottom: 0 }} placeholder="🔍 بحث..." value={search} onChange={e => setSearch(e.target.value)} />
+        <select className="input-field" style={{ marginBottom: 0 }} value={filterCoach} onChange={e => setFilterCoach(e.target.value)}>
+          <option value="all">🥋 كل المدربين</option>
+          {coaches.filter(c => !c.isAdmin).map(c => <option key={c.id} value={String(c.id)}>{c.name} ({players.filter(p => String(p.coachId) === String(c.id)).length})</option>)}
+        </select>
+      </div>
+
+      {/* نقل ونسخ لاعبين */}
+      <div className="card" style={{ marginBottom: 12, borderColor: (transferMode || copyMode) ? "var(--accent2)" : "var(--border)" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: (transferMode || copyMode) ? 12 : 0 }}>
+          <div style={{ fontWeight: 800, fontSize: 14 }}>🔄 نقل / نسخ لاعبين</div>
+          <div style={{ display: "flex", gap: 6 }}>
+            <button onClick={() => { setTransferMode(!transferMode); setCopyMode(false); setSelectedPlayers([]); setTargetCoach(""); }}
+              className={`btn btn-sm ${transferMode ? "btn-red" : "btn-blue"}`}>
+              {transferMode ? "إلغاء" : "🔄 نقل"}
+            </button>
+            <button onClick={() => { setCopyMode(!copyMode); setTransferMode(false); setSelectedPlayers([]); setTargetCoach(""); }}
+              className={`btn btn-sm ${copyMode ? "btn-red" : "btn-ghost"}`}>
+              {copyMode ? "إلغاء" : "📋 نسخ"}
+            </button>
+          </div>
+        </div>
+        {(transferMode || copyMode) && (
+          <div>
+            <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 8 }}>
+              {transferMode ? "اختر اللاعبين للنقل" : "اختر اللاعبين للنسخ"} ثم اختر المدرب
+            </div>
+            <select className="input-field" value={targetCoach} onChange={e => setTargetCoach(e.target.value)}>
+              <option value="">اختر المدرب</option>
+              {coaches.filter(c => !c.isAdmin).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+            {selectedPlayers.length > 0 && targetCoach && (
+              <button onClick={() => {
+                const targetName = coaches.find(c => String(c.id) === targetCoach)?.name;
+                setConfirm({
+                  msg: `${transferMode ? "نقل" : "نسخ"} ${selectedPlayers.length} لاعب للمدرب ${targetName}؟`,
+                  fn: () => {
+                    if (transferMode) {
+                      setPlayers(players.map(p => selectedPlayers.includes(p.id) ? { ...p, coachId: Number(targetCoach) } : p));
+                      showToast(`تم نقل ${selectedPlayers.length} لاعب ✅`, "success");
+                    } else {
+                      const newPlayers = selectedPlayers.map(id => {
+                        const original = players.find(p => p.id === id);
+                        const newId = Date.now() + Math.random();
+                        return { ...original, id: newId, coachId: Number(targetCoach) };
+                      });
+                      setPlayers([...players, ...newPlayers]);
+                      showToast(`تم نسخ ${selectedPlayers.length} لاعب ✅`, "success");
+                    }
+                    setSelectedPlayers([]); setTargetCoach(""); setTransferMode(false); setCopyMode(false);
+                  }
+                });
+              }} className="btn btn-primary btn-full">
+                {transferMode ? "🔄" : "📋"} {transferMode ? "نقل" : "نسخ"} {selectedPlayers.length} لاعب
+              </button>
+            )}
+            {selectedPlayers.length > 0 && <div style={{ fontSize: 12, color: "var(--accent)", marginTop: 6 }}>✅ تم اختيار {selectedPlayers.length} لاعب</div>}
+          </div>
+        )}
+      </div>
+
+      {/* استيراد من إكسل */}
+      <div className="card" style={{ marginBottom: 12 }}>
+        <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 8 }}>📤 استيراد من إكسل</div>
+        <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 10 }}>
+          ارفع ملف Excel فيه أعمدة: <span style={{ color: "var(--accent)" }}>الاسم، المدرب، الحزام، تاريخ الميلاد، التليفون، نوع الاشتراك</span>
+        </div>
+        <input type="file" accept=".xlsx,.xls,.csv" style={{ display: "none" }} id="importFile"
+          onChange={async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            if (!window.XLSX) return showToast("جاري تحميل مكتبة الإكسل...", "info");
+            try {
+              const data = await file.arrayBuffer();
+              const wb = window.XLSX.read(data);
+              const ws = wb.Sheets[wb.SheetNames[0]];
+              const rows = window.XLSX.utils.sheet_to_json(ws);
+              let added = 0;
+              const newPlayers = [];
+              const newDetails = { ...playerDetails };
+              rows.forEach(row => {
+                const name = row["الاسم"] || row["Name"] || row["name"];
+                const coachName = row["المدرب"] || row["Coach"];
+                if (!name) return;
+                const coach = coaches.find(c => c.name === coachName || String(c.id) === coachName);
+                const newId = Date.now() + Math.random();
+                newPlayers.push({ id: newId, name: String(name), coachId: coach ? coach.id : (coaches.find(c => !c.isAdmin)?.id || 0) });
+                newDetails[newId] = {
+                  belt: row["الحزام"] || "أبيض",
+                  birthdate: row["تاريخ الميلاد"] || "",
+                  phone: String(row["التليفون"] || ""),
+                  subType: row["نوع الاشتراك"] || "غير عضو",
+                  joinDate: getToday(),
+                  regFeePaid: false,
+                };
+                added++;
+              });
+              setPlayers([...players, ...newPlayers]);
+              setPlayerDetails(newDetails);
+              showToast(`تم استيراد ${added} لاعب بنجاح 🎉`, "success");
+              e.target.value = "";
+            } catch(err) {
+              showToast("خطأ في قراءة الملف — تأكد من الصيغة", "error");
+            }
+          }} />
+        <div style={{ display: "flex", gap: 8 }}>
+          <button onClick={() => document.getElementById("importFile").click()} className="btn btn-ghost btn-sm" style={{ flex: 1 }}>📥 رفع ملف Excel</button>
+          <button onClick={() => {
+            if (!window.XLSX) return showToast("جاري تحميل مكتبة الإكسل...", "info");
+            const template = [{ "الاسم": "مثال", "المدرب": "اسم المدرب", "الحزام": "أبيض", "تاريخ الميلاد": "2000-01-01", "التليفون": "01000000000", "نوع الاشتراك": "غير عضو" }];
+            const ws = window.XLSX.utils.json_to_sheet(template);
+            const wb = window.XLSX.utils.book_new();
+            window.XLSX.utils.book_append_sheet(wb, ws, "لاعبين");
+            window.XLSX.writeFile(wb, "template_لاعبين.xlsx");
+            showToast("تم تحميل النموذج ✅", "success");
+          }} className="btn btn-blue btn-sm" style={{ flex: 1 }}>📋 تحميل نموذج</button>
+        </div>
+      </div>
 
       {filtered.map(p => {
         const coach = coaches.find(c => c.id === p.coachId);
@@ -1645,23 +1771,34 @@ function AdminPlayers({ coaches, players, setPlayers, playerDetails, setPlayerDe
         return (
           <div key={p.id} className="player-row">
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <div>
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <b>{p.name}</b>
-                  {pd.belt && <BeltBadge belt={pd.belt} />}
-                </div>
-                <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 2, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-                  <span>{coach?.name || "---"}</span>
-                  {pd.joinDate && <span>· انضم: {pd.joinDate}</span>}
-                  {pd.subType && (() => { const st = SUB_TYPES.find(s => s.label === pd.subType); return st ? <span style={{ color: st.color, fontWeight: 700, fontSize: 11 }}>{st.icon} {st.price} جنيه</span> : null; })()}
-                  <span className={`badge ${pd.regFeePaid ? "badge-green" : "badge-red"}`} style={{ fontSize: 10 }}>🏷 {pd.regFeePaid ? "قيد مسدد" : "قيد غير مسدد"}</span>
-                  {pd.birthdate && (() => { const bd = new Date(pd.birthdate); const today = new Date(); const isToday = bd.getDate() === today.getDate() && bd.getMonth() === today.getMonth(); const age = today.getFullYear() - bd.getFullYear(); return <span style={{ fontSize: 10, color: isToday ? "var(--yellow)" : "var(--muted)" }}>{isToday ? "🎂 عيد ميلاده النهارده!" : `${age} سنة`}</span>; })()}
-                  {pd.phone && <a href={`tel:${pd.phone}`} style={{ fontSize: 10, color: "var(--accent2)" }}>📞 {pd.phone}</a>}
+              <div style={{ display: "flex", alignItems: "center", gap: 10, flex: 1 }}>
+                {/* Checkbox للنقل والنسخ */}
+                {(transferMode || copyMode) && (
+                  <div className={`checkbox-custom ${selectedPlayers.includes(p.id) ? "checked" : ""}`}
+                    onClick={() => setSelectedPlayers(prev => prev.includes(p.id) ? prev.filter(x => x !== p.id) : [...prev, p.id])}>
+                    {selectedPlayers.includes(p.id) && <span style={{ color: "white", fontSize: 13 }}>✓</span>}
+                  </div>
+                )}
+                <div style={{ flex: 1 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <b>{p.name}</b>
+                    {pd.belt && <BeltBadge belt={pd.belt} />}
+                  </div>
+                  <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 2, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                    <span>{coach?.name || "---"}</span>
+                    {pd.joinDate && <span>· انضم: {pd.joinDate}</span>}
+                    {pd.subType && (() => { const st = SUB_TYPES.find(s => s.label === pd.subType); return st ? <span style={{ color: st.color, fontWeight: 700, fontSize: 11 }}>{st.icon} {st.price} جنيه</span> : null; })()}
+                    <span className={`badge ${pd.regFeePaid ? "badge-green" : "badge-red"}`} style={{ fontSize: 10 }}>🏷 {pd.regFeePaid ? "قيد مسدد" : "قيد غير مسدد"}</span>
+                    {pd.birthdate && (() => { const bd = new Date(pd.birthdate); const today = new Date(); const isToday = bd.getDate() === today.getDate() && bd.getMonth() === today.getMonth(); const age = today.getFullYear() - bd.getFullYear(); return <span style={{ fontSize: 10, color: isToday ? "var(--yellow)" : "var(--muted)" }}>{isToday ? "🎂 عيد ميلاده النهارده!" : `${age} سنة`}</span>; })()}
+                    {pd.phone && <a href={`tel:${pd.phone}`} style={{ fontSize: 10, color: "var(--accent2)" }}>📞 {pd.phone}</a>}
+                  </div>
                 </div>
               </div>
               <div style={{ display: "flex", gap: 6 }}>
-                <button onClick={() => setEditId(isEdit ? null : p.id)} className="btn btn-ghost btn-xs">✏️</button>
-                <button onClick={() => setConfirm({ msg: `حذف اللاعب "${p.name}"؟`, fn: () => { setPlayers(players.filter(x => x.id !== p.id)); showToast(`تم حذف اللاعب ${p.name}`, "info"); } })} className="btn btn-red btn-xs">🗑</button>
+                {!transferMode && !copyMode && <>
+                  <button onClick={() => setEditId(isEdit ? null : p.id)} className="btn btn-ghost btn-xs">✏️</button>
+                  <button onClick={() => setConfirm({ msg: `حذف اللاعب "${p.name}"؟`, fn: () => { setPlayers(players.filter(x => x.id !== p.id)); showToast(`تم حذف اللاعب ${p.name}`, "info"); } })} className="btn btn-red btn-xs">🗑</button>
+                </>}
               </div>
             </div>
             {isEdit && (
