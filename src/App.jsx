@@ -873,7 +873,7 @@ export default function App() {
     document.body.appendChild(script);
 
     const fetchData = async () => {
-      const adminData = [{ id: 100, username: "admin", password: "2201", name: "المدير العام", isAdmin: true }];
+      const adminData = [{ id: 100, username: "admin", password: "2201", name: "المدير الادارى", isAdmin: true }];
       try {
         const [cSnap, pSnap, aSnap, paySnap, nSnap, pdSnap, evSnap, logsSnap, pExtraSnap, trainSnap] = await Promise.all([
           getDoc(doc(db, "clubData", "coaches")),
@@ -959,7 +959,7 @@ export default function App() {
           <div className="header-bar">
             <div>
               <div style={{ fontWeight: 800, fontSize: 15 }}>{user.name}</div>
-              <small style={{ color: "var(--muted)", fontSize: 11 }}>{user.isAdmin ? "🛡 مدير النادي" : "🥋 مدرب"}</small>
+              <small style={{ color: "var(--muted)", fontSize: 11 }}>{user.isAdmin ? "🛡 مدير الادارى" : "🥋 مدرب"}</small>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <img src="/logo192.png" alt="logo" style={{ width: 28, height: 28, objectFit: "contain", borderRadius: 6 }} />
@@ -1463,7 +1463,9 @@ function AdminReports({ coaches, players, attendance, payments, playerDetails })
                   <span>حضور: <span style={{ color: "var(--accent)", fontWeight: 700 }}>{att.count} يوم</span></span>
                   {payments[p.id]?.date && <span>💰 آخر دفع: <span style={{ color: "var(--yellow)" }}>{payments[p.id].date}</span></span>}
                   {pd.examRegistered && <span className="badge badge-yellow">🎓 مسجل بفعالية</span>}
+                  {pd.examResult && pd.examResult !== "لم يمتحن" && <span className={`badge ${pd.examResult === "نجح ✅" ? "badge-green" : "badge-red"}`}>{pd.examResult}</span>}
                   <span className={`badge ${pd.regFeePaid ? "badge-green" : "badge-red"}`}>🏷 القيد: {pd.regFeePaid ? "مسدد" : "لم يسدد"}</span>
+                  {pd.medical && <span style={{ fontSize: 10, color: "var(--red)", fontWeight: 700 }}>⚕️ {pd.medical}</span>}
                 </div>
                 {pd.eventName && <div style={{ fontSize: 11, color: "var(--accent2)", marginTop: 2 }}>🏆 {pd.eventName}</div>}
               </div>
@@ -1518,6 +1520,16 @@ function AdminCoaches({ coaches, setCoaches }) {
             <input className="input-field" value={c.team || ""} onChange={e => update(c.id, "team", e.target.value)} placeholder="الفرقة" />
             <input className="input-field" value={c.password} onChange={e => update(c.id, "password", e.target.value)} placeholder="الباسورد" />
           </div>
+          <div className="grid-2">
+            <div>
+              <label style={{ fontSize: 11, color: "var(--muted)", display: "block", marginBottom: 4 }}>📞 التليفون</label>
+              <input className="input-field" value={c.phone || ""} onChange={e => update(c.id, "phone", e.target.value)} placeholder="01xxxxxxxxx" />
+            </div>
+            <div>
+              <label style={{ fontSize: 11, color: "var(--muted)", display: "block", marginBottom: 4 }}>🎂 سنة الميلاد</label>
+              <input type="number" className="input-field" value={c.birthYear || ""} onChange={e => update(c.id, "birthYear", e.target.value)} placeholder="1990" />
+            </div>
+          </div>
           <button onClick={() => showToast(`تم حفظ بيانات ${c.name}`, "success")} className="btn btn-ghost btn-sm btn-full">💾 حفظ التغييرات</button>
         </div>
       ))}
@@ -1528,7 +1540,7 @@ function AdminCoaches({ coaches, setCoaches }) {
 // ─────────── Admin Players ───────────
 function AdminPlayers({ coaches, players, setPlayers, playerDetails, setPlayerDetails }) {
   const [n, setN] = useState(""); const [cId, setCId] = useState(""); const [belt, setBelt] = useState("أبيض"); const [joinDate, setJoinDate] = useState(getToday()); const [subType, setSubType] = useState("غير عضو");
-  const [newBirthdate, setNewBirthdate] = useState(""); const [newPhone, setNewPhone] = useState(""); const [newWeight, setNewWeight] = useState(""); const [newHeight, setNewHeight] = useState(""); const [newRegFeePaid, setNewRegFeePaid] = useState(false);
+  const [newBirthdate, setNewBirthdate] = useState(""); const [newPhone, setNewPhone] = useState(""); const [newWeight, setNewWeight] = useState(""); const [newHeight, setNewHeight] = useState(""); const [newRegFeePaid, setNewRegFeePaid] = useState(false); const [newMedical, setNewMedical] = useState("");
   const [search, setSearch] = useState("");
   const [confirm, setConfirm] = useState(null);
   const [editId, setEditId] = useState(null);
@@ -1547,11 +1559,11 @@ function AdminPlayers({ coaches, players, setPlayers, playerDetails, setPlayerDe
         belt, joinDate, subType,
         birthdate: newBirthdate, phone: newPhone,
         weight: newWeight, height: newHeight,
-        regFeePaid: newRegFeePaid
+        regFeePaid: newRegFeePaid, medical: newMedical
       }});
       showToast(`تم إضافة اللاعب ${n} بنجاح 🎉`, "success");
       setN(""); setCId(""); setBelt("أبيض"); setJoinDate(getToday()); setSubType("غير عضو");
-      setNewBirthdate(""); setNewPhone(""); setNewWeight(""); setNewHeight(""); setNewRegFeePaid(false);
+      setNewBirthdate(""); setNewPhone(""); setNewWeight(""); setNewHeight(""); setNewRegFeePaid(false); setNewMedical("");
     } else showToast("يرجى ملء الاسم واختيار المدرب", "error");
   };
 
@@ -1604,6 +1616,10 @@ function AdminPlayers({ coaches, players, setPlayers, playerDetails, setPlayerDe
           <div>
             <label style={{ fontSize: 11, color: "var(--muted)", display: "block", marginBottom: 4 }}>📅 تاريخ الانضمام</label>
             <input type="date" className="input-field" value={joinDate} onChange={e => setJoinDate(e.target.value)} />
+          </div>
+          <div>
+            <label style={{ fontSize: 11, color: "var(--muted)", display: "block", marginBottom: 4 }}>📝 ملاحظة طبية</label>
+            <input className="input-field" placeholder="إصابة / حالة خاصة..." value={newMedical || ""} onChange={e => setNewMedical(e.target.value)} />
           </div>
         </div>
 
@@ -1789,7 +1805,7 @@ function AdminPlayers({ coaches, players, setPlayers, playerDetails, setPlayerDe
                     {pd.joinDate && <span>· انضم: {pd.joinDate}</span>}
                     {pd.subType && (() => { const st = SUB_TYPES.find(s => s.label === pd.subType); return st ? <span style={{ color: st.color, fontWeight: 700, fontSize: 11 }}>{st.icon} {st.price} جنيه</span> : null; })()}
                     <span className={`badge ${pd.regFeePaid ? "badge-green" : "badge-red"}`} style={{ fontSize: 10 }}>🏷 {pd.regFeePaid ? "قيد مسدد" : "قيد غير مسدد"}</span>
-                    {pd.birthdate && (() => { const bd = new Date(pd.birthdate); const today = new Date(); const isToday = bd.getDate() === today.getDate() && bd.getMonth() === today.getMonth(); const age = today.getFullYear() - bd.getFullYear(); return <span style={{ fontSize: 10, color: isToday ? "var(--yellow)" : "var(--muted)" }}>{isToday ? "🎂 عيد ميلاده النهارده!" : `${age} سنة`}</span>; })()}
+                    {pd.birthdate && (() => { const bd = new Date(pd.birthdate); const today = new Date(); const isToday = bd.getDate() === today.getDate() && bd.getMonth() === today.getMonth(); const year = bd.getFullYear(); return <span style={{ fontSize: 10, color: isToday ? "var(--yellow)" : "var(--muted)" }}>{isToday ? "🎂 عيد ميلاده النهارده!" : `مواليد ${year}`}</span>; })()}
                     {pd.phone && <a href={`tel:${pd.phone}`} style={{ fontSize: 10, color: "var(--accent2)" }}>📞 {pd.phone}</a>}
                   </div>
                 </div>
@@ -1861,6 +1877,11 @@ function AdminPlayers({ coaches, players, setPlayers, playerDetails, setPlayerDe
                     <label style={{ fontSize: 11, color: "var(--muted)", display: "block", marginBottom: 4 }}>📏 الطول (سم)</label>
                     <input type="number" className="input-field" placeholder="170" value={pd.height || ""} onChange={e => setPlayerDetails({ ...playerDetails, [p.id]: { ...pd, height: e.target.value } })} />
                   </div>
+                </div>
+                {/* ملاحظة طبية */}
+                <div>
+                  <label style={{ fontSize: 11, color: "var(--muted)", display: "block", marginBottom: 4 }}>⚕️ ملاحظة طبية</label>
+                  <input className="input-field" placeholder="إصابة / حالة خاصة..." value={pd.medical || ""} onChange={e => setPlayerDetails({ ...playerDetails, [p.id]: { ...pd, medical: e.target.value } })} />
                 </div>
                 <button onClick={() => { setEditId(null); showToast(`تم حفظ بيانات ${p.name}`, "success"); }} className="btn btn-primary btn-sm btn-full">💾 حفظ</button>
               </div>
@@ -2660,12 +2681,13 @@ function CoachView({ coach, players, setPlayers, attendance, setAttendance, paym
               <div key={p.id} className="player-row" style={{ opacity: sub.valid ? 1 : 0.7 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                   <div>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                       <b>{p.name}</b>
                       {pd.belt && <BeltBadge belt={pd.belt} />}
                       {pd.birthdate && (() => { const d = new Date(pd.birthdate); const t = new Date(); return d.getDate()===t.getDate()&&d.getMonth()===t.getMonth() ? <span style={{fontSize:12}}>🎂</span> : null; })()}
+                      {pd.medical && <span style={{ fontSize: 10, color: "var(--red)", fontWeight: 700, background: "rgba(255,69,96,0.1)", padding: "2px 6px", borderRadius: 6 }}>⚕️ {pd.medical}</span>}
                     </div>
-                    <div style={{ display: "flex", gap: 6, alignItems: "center", marginTop: 2 }}>
+                    <div style={{ display: "flex", gap: 6, alignItems: "center", marginTop: 2, flexWrap: "wrap" }}>
                       <span style={{ fontSize: 11, color: sub.valid ? "var(--accent)" : "var(--red)" }}>{sub.msg}</span>
                       {pd.phone && <a href={`https://wa.me/2${pd.phone}`} target="_blank" rel="noreferrer" style={{ fontSize: 10, color: "#25D366", textDecoration: "none" }}>📱 واتساب</a>}
                     </div>
@@ -2828,14 +2850,27 @@ function CoachEvents({ myPlayers, events, playerDetails, setPlayerDetails }) {
                         </div>
                       </div>
                       {isReg && (
-                        <div style={{ display: "flex", align: "center", gap: 8 }}>
-                          <div className={`checkbox-custom ${feePaid ? "checked" : ""}`} style={{ borderColor: feePaid ? "var(--yellow)" : "var(--border2)", background: feePaid ? "var(--yellow)" : "var(--bg)" }} onClick={() => {
-                            setPlayerDetails({ ...playerDetails, [p.id]: { ...pd, feePaid: !feePaid } });
-                            showToast(!feePaid ? `تم تأكيد سداد قيد ${p.name} 💰` : `تم إلغاء سداد قيد ${p.name}`, !feePaid ? "success" : "info");
-                          }}>
-                            {feePaid && <span style={{ color: "#000", fontSize: 13 }}>✓</span>}
+                        <div style={{ display: "flex", flexDirection: "column", gap: 6, alignItems: "flex-end" }}>
+                          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                            <div className={`checkbox-custom ${feePaid ? "checked" : ""}`} style={{ borderColor: feePaid ? "var(--yellow)" : "var(--border2)", background: feePaid ? "var(--yellow)" : "var(--bg)" }} onClick={() => {
+                              setPlayerDetails({ ...playerDetails, [p.id]: { ...pd, feePaid: !feePaid } });
+                              showToast(!feePaid ? `تم تأكيد سداد قيد ${p.name} 💰` : `تم إلغاء سداد قيد ${p.name}`, !feePaid ? "success" : "info");
+                            }}>
+                              {feePaid && <span style={{ color: "#000", fontSize: 13 }}>✓</span>}
+                            </div>
+                            <span style={{ fontSize: 12, color: feePaid ? "var(--yellow)" : "var(--muted)" }}>سدد القيد</span>
                           </div>
-                          <span style={{ fontSize: 12, color: feePaid ? "var(--yellow)" : "var(--muted)" }}>سدد القيد</span>
+                          {/* نتيجة الاختبار */}
+                          <div style={{ display: "flex", gap: 4 }}>
+                            {["لم يمتحن", "نجح ✅", "رسب ❌"].map(result => (
+                              <button key={result} onClick={() => {
+                                setPlayerDetails({ ...playerDetails, [p.id]: { ...pd, examResult: result } });
+                                if (result === "نجح ✅") showToast(`🎉 ${p.name} نجح في الاختبار!`, "success");
+                              }} className={`btn btn-xs ${pd.examResult === result ? (result === "نجح ✅" ? "btn-primary" : result === "رسب ❌" ? "btn-red" : "btn-ghost") : "btn-ghost"}`}>
+                                {result}
+                              </button>
+                            ))}
+                          </div>
                         </div>
                       )}
                     </div>
