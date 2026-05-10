@@ -273,6 +273,47 @@ const getAnniversaryAlerts = (players, playerDetails) => {
   });
 };
 
+
+// ─────────── إشعار غياب واتساب ───────────
+const notifyAbsence = (player, pd, coachName, daysAbsent) => {
+  if (!pd.phone) return showToast("مفيش رقم لولي أمر " + player.name, "error");
+  const msg = `السلام عليكم،
+هذا إشعار من نادي الطالبية
+اللاعب: ${player.name}
+غائب منذ ${daysAbsent} أيام متتالية
+يرجى التواصل مع المدرب ${coachName}
+📞 نادي الطالبية`;
+  window.open(`https://wa.me/2${pd.phone}?text=${encodeURIComponent(msg)}`, "_blank");
+};
+
+
+// ─────────── رسالة تهنئة نجاح الاختبار ───────────
+const sendExamCongrats = (player, pd, belt, eventName, coachName) => {
+  if (!pd.phone) return showToast(`مفيش رقم لولي أمر ${player.name}`, "error");
+  const msg = `🎉 مبروك يا ${player.name}!
+
+يسعدنا في نادي الطالبية أن نبشركم بأن نجمنا
+🥋 ${player.name}
+قد اجتاز اختبار ${eventName} بنجاح
+
+🏅 الحزام الجديد: ${belt || "---"}
+👨‍🏫 تحت إشراف: ${coachName}
+
+كل التهانئ وإلى الأمام دائماً! 💪
+
+🏫 نادي الطالبية`;
+  window.open(`https://wa.me/2${pd.phone}?text=${encodeURIComponent(msg)}`, "_blank");
+  showToast(`تم إرسال تهنئة لولي أمر ${player.name} 🎉`, "success");
+};
+
+// ─────────── تاريخ الأحزمة ───────────
+const addBeltHistory = (playerDetails, setPlayerDetails, playerId, belt) => {
+  const pd = playerDetails[playerId] || {};
+  const history = pd.beltHistory || [];
+  const newEntry = { belt, date: getToday() };
+  setPlayerDetails({ ...playerDetails, [playerId]: { ...pd, beltHistory: [...history, newEntry] } });
+};
+
 // ─────────── واتساب شير ───────────
 const shareWhatsApp = (text) => {
   const encoded = encodeURIComponent(text);
@@ -675,6 +716,18 @@ select.input-field option { background: var(--surface); }
   .header-bar { padding: 12px 16px; }
 }
 
+/* Calendar styles */
+.calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.cal-day { aspect-ratio: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; border-radius: 8px; font-size: 12px; cursor: pointer; transition: all 0.2s; }
+.cal-day:hover { background: var(--surface2); }
+.cal-day.training { background: rgba(0,212,170,0.15); border: 1px solid var(--accent); color: var(--accent); font-weight: 800; }
+.cal-day.event { background: rgba(255,195,0,0.15); border: 1px solid var(--yellow); color: var(--yellow); font-weight: 800; }
+.cal-day.today { background: var(--accent2); color: white; font-weight: 900; }
+.cal-day.other-month { opacity: 0.3; }
+
+/* Message notification dot */
+.notif-dot { width: 8px; height: 8px; background: var(--red); border-radius: 50%; position: absolute; top: -2px; left: -2px; animation: pulse 1.5s infinite; }
+
 /* Glassmorphism for cards */
 .glass-card {
   background: rgba(12,21,37,0.7);
@@ -825,6 +878,83 @@ function ThemeToggle({ darkMode, setDarkMode }) {
   );
 }
 
+
+// ─────────── مقارنة شهرية ───────────
+function MonthlyComparison({ players, coaches, attendance, payments, coachId }) {
+  const months = [];
+  const now = new Date();
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const monthKey = d.toISOString().slice(0, 7);
+    const label = d.toLocaleDateString("ar-EG", { month: "short", year: "2-digit" });
+    const myPlayers = coachId
+      ? players.filter(p => String(p.coachId) === String(coachId))
+      : players;
+    const totalAtt = myPlayers.reduce((sum, p) => {
+      const keys = Object.keys(attendance).filter(k => k.includes(monthKey) && k.startsWith(`${p.coachId}_`));
+      return sum + keys.filter(k => attendance[k]?.[p.id] === "present").length;
+    }, 0);
+    const avg = myPlayers.length ? Math.round(totalAtt / myPlayers.length) : 0;
+    months.push({ label, avg, total: totalAtt });
+  }
+  const maxVal = Math.max(...months.map(m => m.avg), 1);
+  return (
+    <div className="card" style={{ marginBottom: 14 }}>
+      <div className="section-title">📈 مقارنة الحضور (آخر 6 شهور)</div>
+      <div style={{ display: "flex", alignItems: "flex-end", gap: 8, height: 120, paddingBottom: 24, position: "relative" }}>
+        {months.map((m, i) => (
+          <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", height: "100%", justifyContent: "flex-end" }}>
+            <div style={{ fontSize: 10, color: "var(--accent)", fontWeight: 700, marginBottom: 2 }}>{m.avg}</div>
+            <div style={{ width: "100%", background: `linear-gradient(180deg, var(--accent2), var(--accent3))`,
+              height: `${(m.avg / maxVal) * 80}px`, borderRadius: "4px 4px 0 0", minHeight: m.avg ? 4 : 0,
+              opacity: i === 5 ? 1 : 0.6 + (i * 0.08), transition: "height 0.5s" }} />
+            <div style={{ fontSize: 9, color: "var(--muted)", marginTop: 4, position: "absolute", bottom: 0 }}>{m.label}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─────────── كارت اللاعب للطباعة ───────────
+const printPlayerCard = (player, pd, coach) => {
+  const beltObj = (pd.belt && [{label:"أبيض",color:"#f0f0f0"},{label:"أصفر",color:"#FFD700"},{label:"برتقالي",color:"#FF8C00"},{label:"أخضر",color:"#228B22"},{label:"أزرق",color:"#1E90FF"},{label:"بنفسجي",color:"#800080"},{label:"بني",color:"#8B4513"},{label:"أحمر",color:"#DC143C"},{label:"أسود",color:"#1a1a1a"}].find(b => b.label === pd.belt)) || {color:"#f0f0f0"};
+  const html = `<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8"/>
+  <style>
+    body{margin:0;background:#f0f4f8;display:flex;align-items:center;justify-content:center;min-height:100vh;font-family:Arial,sans-serif;}
+    .card{width:340px;background:linear-gradient(135deg,#0c1525,#1a2d4a);border-radius:20px;padding:28px;color:white;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,0.4);}
+    .logo{font-size:40px;margin-bottom:8px;}
+    .club{font-size:16px;color:#00d4aa;font-weight:900;margin-bottom:16px;}
+    .avatar{width:80px;height:80px;border-radius:50%;background:${beltObj.color};display:flex;align-items:center;justify-content:center;font-size:36px;margin:0 auto 12px;border:3px solid rgba(255,255,255,0.2);}
+    .name{font-size:22px;font-weight:900;margin-bottom:4px;}
+    .belt{font-size:13px;color:#ffc300;margin-bottom:12px;}
+    .info{background:rgba(255,255,255,0.06);border-radius:12px;padding:12px;text-align:right;font-size:12px;line-height:2;}
+    .label{color:#4a6080;}
+    .val{color:white;font-weight:700;}
+    .footer{margin-top:14px;font-size:10px;color:#4a6080;}
+    @media print{body{background:white;}}
+  </style></head><body>
+  <div class="card">
+    <div class="logo">🥋</div>
+    <div class="club">نادي الطالبية</div>
+    <div class="avatar">🥋</div>
+    <div class="name">${player.name}</div>
+    <div class="belt">🥋 حزام ${pd.belt || "أبيض"}</div>
+    <div class="info">
+      <div><span class="label">المدرب: </span><span class="val">${coach?.name || "---"}</span></div>
+      ${pd.birthdate ? `<div><span class="label">مواليد: </span><span class="val">${new Date(pd.birthdate).getFullYear()}</span></div>` : ""}
+      ${pd.phone ? `<div><span class="label">التليفون: </span><span class="val">${pd.phone}</span></div>` : ""}
+      ${pd.subType ? `<div><span class="label">الاشتراك: </span><span class="val">${pd.subType}</span></div>` : ""}
+      ${pd.joinDate ? `<div><span class="label">الانضمام: </span><span class="val">${pd.joinDate}</span></div>` : ""}
+    </div>
+    <div class="footer">نادي الطالبية · تطوير Ahmed Sayed</div>
+  </div></body></html>`;
+  const w = window.open("", "_blank");
+  w.document.write(html);
+  w.document.close();
+  setTimeout(() => w.print(), 600);
+};
+
 // ───────────── Belt Badge ─────────────
 function BeltBadge({ belt }) {
   const b = BELTS.find(x => x.label === belt) || BELTS[0];
@@ -850,6 +980,8 @@ export default function App() {
   const [playerExtra, setPlayerExtra] = useState({});
   const [trainingSettings, setTrainingSettings] = useState({ startHour: 17, duration: 90 });
   const [darkMode, setDarkMode] = useState(true);
+  const [messages, setMessages] = useState([]);
+  const [trainingPlan, setTrainingPlan] = useState({});
   const lastActivityRef = useRef(Date.now());
 
   // تسجيل خروج تلقائي بعد 30 دقيقة
@@ -873,9 +1005,9 @@ export default function App() {
     document.body.appendChild(script);
 
     const fetchData = async () => {
-      const adminData = [{ id: 100, username: "admin", password: "2201", name: "المدير الادارى", isAdmin: true }];
+      const adminData = [{ id: 100, username: "admin", password: "2201", name: "المدير العام", isAdmin: true }];
       try {
-        const [cSnap, pSnap, aSnap, paySnap, nSnap, pdSnap, evSnap, logsSnap, pExtraSnap, trainSnap] = await Promise.all([
+        const [cSnap, pSnap, aSnap, paySnap, nSnap, pdSnap, evSnap, logsSnap, pExtraSnap, trainSnap, msgSnap, tPlanSnap] = await Promise.all([
           getDoc(doc(db, "clubData", "coaches")),
           getDoc(doc(db, "clubData", "players")),
           getDoc(doc(db, "clubData", "attendance")),
@@ -886,6 +1018,8 @@ export default function App() {
           getDoc(doc(db, "clubData", "logs")),
           getDoc(doc(db, "clubData", "playerExtra")),
           getDoc(doc(db, "clubData", "trainingSettings")),
+          getDoc(doc(db, "clubData", "messages")),
+          getDoc(doc(db, "clubData", "trainingPlan")),
         ]);
         let dbCoaches = cSnap.exists() ? JSON.parse(cSnap.data().value) : adminData;
         const hasAdmin = dbCoaches.some(c => c.username === "admin");
@@ -900,6 +1034,8 @@ export default function App() {
         setLogs(logsSnap.exists() ? JSON.parse(logsSnap.data().value) : []);
         setPlayerExtra(pExtraSnap.exists() ? JSON.parse(pExtraSnap.data().value) : {});
         setTrainingSettings(trainSnap.exists() ? JSON.parse(trainSnap.data().value) : { startHour: 17, duration: 90 });
+        setMessages(msgSnap.exists() ? JSON.parse(msgSnap.data().value) : []);
+        setTrainingPlan(tPlanSnap.exists() ? JSON.parse(tPlanSnap.data().value) : {});
       } catch (e) { 
         console.error("Firebase error:", e);
         setCoaches(adminData);
@@ -959,7 +1095,7 @@ export default function App() {
           <div className="header-bar">
             <div>
               <div style={{ fontWeight: 800, fontSize: 15 }}>{user.name}</div>
-              <small style={{ color: "var(--muted)", fontSize: 11 }}>{user.isAdmin ? "🛡 مدير الادارى" : "🥋 مدرب"}</small>
+              <small style={{ color: "var(--muted)", fontSize: 11 }}>{user.isAdmin ? "🛡 مدير النادي" : "🥋 مدرب"}</small>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <img src="/logo192.png" alt="logo" style={{ width: 28, height: 28, objectFit: "contain", borderRadius: 6 }} />
@@ -977,6 +1113,8 @@ export default function App() {
             {user.isAdmin ? (
               <AdminDashboard
                 coaches={coaches} setCoaches={(d) => { setCoaches(d); save("coaches", d); }}
+                messages={messages} setMessages={(d) => { setMessages(d); save("messages", d); }}
+                trainingPlan={trainingPlan} setTrainingPlan={(d) => { setTrainingPlan(d); save("trainingPlan", d); }}
                 players={players} setPlayers={(d) => { setPlayers(d); save("players", d); }}
                 attendance={attendance} setAttendance={(d) => { setAttendance(d); save("attendance", d); }}
                 payments={payments} setPayments={(d) => { setPayments(d); save("payments", d); }}
@@ -986,6 +1124,7 @@ export default function App() {
                 logs={logs} setLogs={(d) => { setLogs(d); save("logs", d); }}
                 playerExtra={playerExtra} setPlayerExtra={(d) => { setPlayerExtra(d); save("playerExtra", d); }}
                 trainingSettings={trainingSettings} setTrainingSettings={(d) => { setTrainingSettings(d); save("trainingSettings", d); }}
+                messages={messages} setMessages={(d) => { setMessages(d); save("messages", d); }}
               />
             ) : (
               <CoachView
@@ -999,7 +1138,9 @@ export default function App() {
                 logs={logs} setLogs={(d) => { setLogs(d); save("logs", d); }}
                 playerExtra={playerExtra} setPlayerExtra={(d) => { setPlayerExtra(d); save("playerExtra", d); }}
                 trainingSettings={trainingSettings}
-                coaches={coaches} setCoaches={(d) => { setCoaches(d); save("coaches", d); }} setTrainingSettings={(d) => { setTrainingSettings(d); save("trainingSettings", d); }}
+                coaches={coaches} setCoaches={(d) => { setCoaches(d); save("coaches", d); }}
+                messages={messages} setMessages={(d) => { setMessages(d); save("messages", d); }}
+                trainingPlan={trainingPlan} setTrainingPlan={(d) => { setTrainingPlan(d); save("trainingPlan", d); }} setTrainingSettings={(d) => { setTrainingSettings(d); save("trainingSettings", d); }}
               />
             )}
           </div>
@@ -1081,7 +1222,7 @@ function LoginPage({ coaches, onLogin }) {
 }
 
 // ═══════════════════════════════ ADMIN ═══════════════════════════
-function AdminDashboard({ coaches, setCoaches, players, setPlayers, attendance, setAttendance, payments, setPayments, notes, setNotes, playerDetails, setPlayerDetails, events, setEvents, logs, setLogs, playerExtra, setPlayerExtra, trainingSettings, setTrainingSettings }) {
+function AdminDashboard({ coaches, setCoaches, players, setPlayers, attendance, setAttendance, payments, setPayments, notes, setNotes, playerDetails, setPlayerDetails, events, setEvents, logs, setLogs, playerExtra, setPlayerExtra, trainingSettings, setTrainingSettings, messages, setMessages }) {
   const [tab, setTab] = useState("dashboard");
   const expired = players.filter(p => !checkSubStatus(payments[p.id]?.date).valid);
   const active = players.filter(p => checkSubStatus(payments[p.id]?.date).valid);
@@ -1108,7 +1249,7 @@ function AdminDashboard({ coaches, setCoaches, players, setPlayers, attendance, 
       </div>
 
       <div className="tab-bar">
-        {[["dashboard", "🏠 الرئيسية"], ["reports", "📊 تقارير"], ["players", "👥 لاعبين"], ["coaches", "🏅 مدربين"], ["payments", "💰 مالية"], ["events", "🏆 فعاليات"], ["alerts", "🔔 تنبيهات"], ["leaderboard", "🏅 ترتيب"], ["logs", "📋 سجل"], ["reset", "🔄 إعادة"], ["settings", "⚙️ إعدادات"]].map(([k, l]) => (
+        {[["dashboard", "🏠 الرئيسية"], ["reports", "📊 تقارير"], ["players", "👥 لاعبين"], ["coaches", "🏅 مدربين"], ["payments", "💰 مالية"], ["events", "🏆 فعاليات"], ["calendar", "📅 تقويم"], ["messages", "💬 رسائل"], ["alerts", "🔔 تنبيهات"], ["leaderboard", "🏅 ترتيب"], ["logs", "📋 سجل"], ["reset", "🔄 إعادة"], ["settings", "⚙️ إعدادات"]].map(([k, l]) => (
           <button key={k} onClick={() => setTab(k)} className={`tab-item ${tab === k ? "active" : ""}`}>{l}</button>
         ))}
       </div>
@@ -1119,6 +1260,8 @@ function AdminDashboard({ coaches, setCoaches, players, setPlayers, attendance, 
       {tab === "coaches" && <AdminCoaches coaches={coaches} setCoaches={setCoaches} />}
       {tab === "payments" && <AdminPayments players={players} payments={payments} setPayments={setPayments} />}
       {tab === "events" && <AdminEvents events={events} setEvents={setEvents} players={players} playerDetails={playerDetails} setPlayerDetails={setPlayerDetails} coaches={coaches} />}
+      {tab === "calendar" && <ClubCalendar events={events} trainingSettings={trainingSettings} coaches={coaches} coachId={null} />}
+      {tab === "messages" && <InternalMessages user={{ id: 100, name: "المدير العام", isAdmin: true }} coaches={coaches} messages={messages} setMessages={setMessages} />}
       {tab === "alerts" && <AdminAlerts players={players} attendance={attendance} payments={payments} coaches={coaches} playerDetails={playerDetails} />}
       {tab === "leaderboard" && <AdminLeaderboard players={players} coaches={coaches} attendance={attendance} payments={payments} playerDetails={playerDetails} />}
       {tab === "settings" && <AdminSettings trainingSettings={trainingSettings} setTrainingSettings={setTrainingSettings} coaches={coaches} />}
@@ -1432,6 +1575,7 @@ function AdminReports({ coaches, players, attendance, payments, playerDetails })
           shareWhatsApp(lines);
         }} className="btn btn-primary" style={{ flex: 1 }}>📤 واتساب</button>
       </div>
+      <MonthlyComparison players={players} coaches={coaches} attendance={attendance} payments={payments} coachId={coachFilter === "all" ? null : coachFilter} />
       <div className="grid-2" style={{ marginBottom: 8 }}>
         <input className="input-field" style={{ marginBottom: 0 }} placeholder="🔍 بحث باسم اللاعب..." onChange={e => setSearch(e.target.value)} />
         <select className="input-field" style={{ marginBottom: 0 }} value={coachFilter} onChange={e => setCoachFilter(e.target.value)}>
@@ -1469,8 +1613,9 @@ function AdminReports({ coaches, players, attendance, payments, playerDetails })
                 </div>
                 {pd.eventName && <div style={{ fontSize: 11, color: "var(--accent2)", marginTop: 2 }}>🏆 {pd.eventName}</div>}
               </div>
-              <div style={{ textAlign: "center", marginRight: 8 }}>
+              <div style={{ textAlign: "center", marginRight: 8, display: "flex", flexDirection: "column", gap: 4 }}>
                 <DonutChart value={att.percentage} max={100} color={att.percentage >= 75 ? "var(--accent)" : att.percentage >= 50 ? "var(--yellow)" : "var(--red)"} size={52} />
+                <button onClick={() => printPlayerCard(p, pd, coach)} className="btn btn-ghost btn-xs" style={{ fontSize: 10 }}>🪪 كارت</button>
               </div>
             </div>
             <div className="progress-bar" style={{ width: `${att.percentage}%` }} />
@@ -1822,9 +1967,27 @@ function AdminPlayers({ coaches, players, setPlayers, playerDetails, setPlayerDe
                 <div className="grid-2">
                   <div>
                     <label style={{ fontSize: 11, color: "var(--muted)", display: "block", marginBottom: 4 }}>الحزام</label>
-                    <select className="input-field" value={pd.belt || "أبيض"} onChange={e => setPlayerDetails({ ...playerDetails, [p.id]: { ...pd, belt: e.target.value } })}>
+                    <select className="input-field" value={pd.belt || "أبيض"} onChange={e => {
+                      const newBelt = e.target.value;
+                      const history = pd.beltHistory || [];
+                      const newHistory = [...history, { belt: newBelt, date: getToday() }];
+                      setPlayerDetails({ ...playerDetails, [p.id]: { ...pd, belt: newBelt, beltHistory: newHistory } });
+                      showToast(`تم تحديث حزام ${p.name} إلى ${newBelt} 🥋`, "success");
+                    }}>
                       {BELTS.map(b => <option key={b.label} value={b.label}>{b.label}</option>)}
                     </select>
+                    {pd.beltHistory && pd.beltHistory.length > 0 && (
+                      <div style={{ marginTop: 6 }}>
+                        <div style={{ fontSize: 10, color: "var(--muted)", marginBottom: 4 }}>📅 تاريخ الأحزمة:</div>
+                        <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                          {pd.beltHistory.map((h, i) => (
+                            <span key={i} style={{ fontSize: 10, background: "var(--surface2)", padding: "2px 8px", borderRadius: 6, color: "var(--muted2)" }}>
+                              🥋 {h.belt} · {h.date}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                   <div>
                     <label style={{ fontSize: 11, color: "var(--muted)", display: "block", marginBottom: 4 }}>تاريخ الانضمام</label>
@@ -2501,8 +2664,206 @@ function ChangePassword({ coach, coaches, setCoaches }) {
   );
 }
 
+
+// ─────────── تقويم النادي ───────────
+function ClubCalendar({ events, trainingSettings, coaches, coachId }) {
+  const [currentDate, setCurrentDate] = useState(new Date());
+  const year = currentDate.getFullYear();
+  const month = currentDate.getMonth();
+  const firstDay = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const today = new Date();
+  const DAYS_AR_SHORT = ["أح", "إث", "ثل", "أر", "خم", "جم", "سب"];
+  const MONTHS_AR = ["يناير","فبراير","مارس","أبريل","مايو","يونيو","يوليو","أغسطس","سبتمبر","أكتوبر","نوفمبر","ديسمبر"];
+
+  const isTrainingDay = (dayNum) => {
+    const d = new Date(year, month, dayNum);
+    const dayIdx = d.getDay();
+    if (coachId) {
+      const sched = trainingSettings?.[coachId];
+      return sched?.days?.includes(dayIdx) || false;
+    }
+    return Object.values(trainingSettings || {}).some(s => s?.days?.includes(dayIdx));
+  };
+
+  const getEventForDay = (dayNum) => {
+    const dateStr = `${year}-${String(month+1).padStart(2,"0")}-${String(dayNum).padStart(2,"0")}`;
+    return events.find(e => e.date === dateStr);
+  };
+
+  const cells = [];
+  for (let i = 0; i < firstDay; i++) cells.push(null);
+  for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+
+  return (
+    <div className="card">
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+        <button onClick={() => setCurrentDate(new Date(year, month-1, 1))} className="btn btn-ghost btn-sm">◀</button>
+        <div style={{ fontWeight: 800, fontSize: 15 }}>📅 {MONTHS_AR[month]} {year}</div>
+        <button onClick={() => setCurrentDate(new Date(year, month+1, 1))} className="btn btn-ghost btn-sm">▶</button>
+      </div>
+      <div className="calendar-grid" style={{ marginBottom: 8 }}>
+        {DAYS_AR_SHORT.map(d => <div key={d} style={{ textAlign: "center", fontSize: 11, color: "var(--muted)", fontWeight: 700, padding: "4px 0" }}>{d}</div>)}
+      </div>
+      <div className="calendar-grid">
+        {cells.map((day, i) => {
+          if (!day) return <div key={i} />;
+          const isToday = day === today.getDate() && month === today.getMonth() && year === today.getFullYear();
+          const training = isTrainingDay(day);
+          const ev = getEventForDay(day);
+          return (
+            <div key={i} className={`cal-day ${isToday ? "today" : ev ? "event" : training ? "training" : ""}`} title={ev ? ev.name : training ? "يوم تدريب" : ""}>
+              <span>{day}</span>
+              {ev && <span style={{ fontSize: 7 }}>🏆</span>}
+              {!ev && training && <span style={{ fontSize: 7 }}>🥋</span>}
+            </div>
+          );
+        })}
+      </div>
+      <div style={{ display: "flex", gap: 12, marginTop: 10, fontSize: 11 }}>
+        <span style={{ color: "var(--accent)" }}>🥋 تدريب</span>
+        <span style={{ color: "var(--yellow)" }}>🏆 فعالية</span>
+        <span style={{ color: "white" }}>⬜ اليوم</span>
+      </div>
+    </div>
+  );
+}
+
+// ─────────── نظام الرسائل الداخلية ───────────
+function InternalMessages({ user, coaches, messages, setMessages }) {
+  const [newMsg, setNewMsg] = useState("");
+  const [toCoach, setToCoach] = useState("");
+  const myMessages = messages.filter(m => m.to === String(user.id) || (user.isAdmin && m.toAdmin));
+  const unread = myMessages.filter(m => !m.read).length;
+
+  const send = () => {
+    if (!newMsg.trim()) return showToast("اكتب رسالة أولاً", "error");
+    const target = user.isAdmin ? toCoach : "admin";
+    const msg = {
+      id: Date.now(), from: String(user.id), fromName: user.name,
+      to: target, toAdmin: target === "admin",
+      text: newMsg, time: new Date().toLocaleString("ar-EG"), read: false
+    };
+    setMessages([...messages, msg]);
+    showToast("تم إرسال الرسالة ✅", "success");
+    setNewMsg(""); setToCoach("");
+  };
+
+  const markRead = (msgId) => setMessages(messages.map(m => m.id === msgId ? { ...m, read: true } : m));
+
+  return (
+    <div>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
+        <div className="section-title" style={{ margin: 0 }}>💬 الرسائل الداخلية</div>
+        {unread > 0 && <span className="badge badge-red">{unread} جديد</span>}
+      </div>
+
+      {/* إرسال رسالة */}
+      <div className="card" style={{ marginBottom: 14 }}>
+        <div style={{ fontWeight: 700, marginBottom: 10, fontSize: 14 }}>📤 رسالة جديدة</div>
+        {user.isAdmin && (
+          <select className="input-field" value={toCoach} onChange={e => setToCoach(e.target.value)}>
+            <option value="">اختر المدرب</option>
+            {coaches.filter(c => !c.isAdmin).map(c => <option key={c.id} value={String(c.id)}>{c.name}</option>)}
+          </select>
+        )}
+        <textarea className="input-field" style={{ height: 70, resize: "none" }} placeholder="اكتب رسالتك..." value={newMsg} onChange={e => setNewMsg(e.target.value)} />
+        <button onClick={send} className="btn btn-primary btn-full">📤 إرسال</button>
+      </div>
+
+      {/* الرسائل الواردة */}
+      <div className="section-title">📥 الرسائل الواردة</div>
+      {myMessages.length === 0 && <div style={{ color: "var(--muted)", textAlign: "center", padding: 20 }}>لا توجد رسائل</div>}
+      {myMessages.sort((a,b) => b.id - a.id).map(m => (
+        <div key={m.id} className="player-row" style={{ borderRight: `4px solid ${m.read ? "var(--border)" : "var(--accent2)"}` }} onClick={() => markRead(m.id)}>
+          <div style={{ display: "flex", justifyContent: "space-between" }}>
+            <div style={{ fontWeight: 700, fontSize: 13 }}>من: {m.fromName}</div>
+            {!m.read && <span className="badge badge-blue">جديد</span>}
+          </div>
+          <div style={{ fontSize: 13, margin: "6px 0" }}>{m.text}</div>
+          <div style={{ fontSize: 11, color: "var(--muted)" }}>🕐 {m.time}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ─────────── التقييم الأسبوعي ───────────
+function WeeklyRating({ myPlayers, playerDetails, setPlayerDetails, coachName }) {
+  const weekKey = `week_${Math.floor(Date.now() / (7 * 24 * 60 * 60 * 1000))}`;
+  return (
+    <div>
+      <div className="section-title">⭐ التقييم الأسبوعي</div>
+      {myPlayers.map(p => {
+        const pd = playerDetails[p.id] || {};
+        const ratings = pd.weeklyRatings || {};
+        const currentRating = ratings[weekKey] || { stars: 0, note: "" };
+        return (
+          <div key={p.id} className="card" style={{ padding: 14 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+              <div style={{ fontWeight: 700 }}>{p.name}</div>
+              <div style={{ display: "flex", gap: 2 }}>
+                {[1,2,3,4,5].map(star => (
+                  <span key={star} onClick={() => {
+                    const newRatings = { ...ratings, [weekKey]: { ...currentRating, stars: star } };
+                    setPlayerDetails({ ...playerDetails, [p.id]: { ...pd, weeklyRatings: newRatings } });
+                    showToast(`تم تقييم ${p.name} بـ ${star} نجوم`, "success");
+                  }} style={{ fontSize: 22, cursor: "pointer", color: star <= currentRating.stars ? "var(--yellow)" : "var(--border2)" }}>★</span>
+                ))}
+              </div>
+            </div>
+            <input className="input-field" style={{ marginBottom: 0, fontSize: 12 }}
+              placeholder="ملاحظة أسبوعية..." value={currentRating.note}
+              onChange={e => {
+                const newRatings = { ...ratings, [weekKey]: { ...currentRating, note: e.target.value } };
+                setPlayerDetails({ ...playerDetails, [p.id]: { ...pd, weeklyRatings: newRatings } });
+              }} />
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─────────── خطة التدريب ───────────
+function TrainingPlan({ coach, trainingPlan, setTrainingPlan }) {
+  const DAYS_AR_LOCAL = ["الأحد","الاثنين","الثلاثاء","الأربعاء","الخميس","الجمعة","السبت"];
+  const today = new Date().getDay();
+  const [selectedDay, setSelectedDay] = useState(today);
+  const planKey = `${coach.id}_${selectedDay}`;
+  const plan = trainingPlan[planKey] || { warmup: "", main: "", cool: "", notes: "" };
+
+  const update = (field, val) => setTrainingPlan({ ...trainingPlan, [planKey]: { ...plan, [field]: val } });
+
+  return (
+    <div>
+      <div className="section-title">📋 خطة التدريب</div>
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 }}>
+        {DAYS_AR_LOCAL.map((d, i) => (
+          <button key={i} onClick={() => setSelectedDay(i)}
+            className={`btn btn-sm ${selectedDay === i ? "btn-primary" : "btn-ghost"}`}>
+            {d}
+          </button>
+        ))}
+      </div>
+      <div className="card">
+        <div style={{ fontWeight: 800, marginBottom: 12, color: "var(--accent)" }}>📅 {DAYS_AR_LOCAL[selectedDay]}</div>
+        {[["warmup", "🔥 الإحماء"], ["main", "💪 التدريب الأساسي"], ["cool", "🧘 التهدئة"], ["notes", "📝 ملاحظات"]].map(([field, label]) => (
+          <div key={field} style={{ marginBottom: 10 }}>
+            <label style={{ fontSize: 12, color: "var(--muted)", display: "block", marginBottom: 4 }}>{label}</label>
+            <textarea className="input-field" style={{ height: 60, resize: "none", marginBottom: 0 }}
+              placeholder={`اكتب ${label.replace(/[🔥💪🧘📝]/g, "")}...`}
+              value={plan[field]} onChange={e => update(field, e.target.value)} />
+          </div>
+        ))}
+        <button onClick={() => showToast("تم حفظ خطة التدريب ✅", "success")} className="btn btn-primary btn-full">💾 حفظ الخطة</button>
+      </div>
+    </div>
+  );
+}
+
 // ═══════════════════════════════ COACH VIEW ═══════════════════════
-function CoachView({ coach, players, setPlayers, attendance, setAttendance, payments, notes, setNotes, playerDetails, setPlayerDetails, events, logs, setLogs, playerExtra, setPlayerExtra, trainingSettings, coaches, setCoaches }) {
+function CoachView({ coach, players, setPlayers, attendance, setAttendance, payments, notes, setNotes, playerDetails, setPlayerDetails, events, logs, setLogs, playerExtra, setPlayerExtra, trainingSettings, coaches, setCoaches, messages, setMessages, trainingPlan, setTrainingPlan }) {
   const [tab, setTab] = useState("today");
   const [newName, setNewName] = useState("");
   const [selectedDate, setSelectedDate] = useState(getToday());
@@ -2621,7 +2982,7 @@ function CoachView({ coach, players, setPlayers, attendance, setAttendance, paym
       <ChangePassword coach={coach} coaches={coaches} setCoaches={setCoaches} />
 
       <div className="tab-bar">
-        {[["today", "📋 تحضير"], ["reports", "📊 تقارير"], ["notes", "📝 ملاحظات"], ["events", "🏆 فعاليات"]].map(([k, l]) => (
+        {[["today", "📋 تحضير"], ["reports", "📊 تقارير"], ["notes", "📝 ملاحظات"], ["events", "🏆 فعاليات"], ["calendar", "📅 تقويم"], ["plan", "📋 خطة"], ["rating", "⭐ تقييم"], ["messages", "💬 رسائل"]].map(([k, l]) => (
           <button key={k} onClick={() => setTab(k)} className={`tab-item ${tab === k ? "active" : ""}`}>{l}</button>
         ))}
       </div>
@@ -2690,6 +3051,16 @@ function CoachView({ coach, players, setPlayers, attendance, setAttendance, paym
                     <div style={{ display: "flex", gap: 6, alignItems: "center", marginTop: 2, flexWrap: "wrap" }}>
                       <span style={{ fontSize: 11, color: sub.valid ? "var(--accent)" : "var(--red)" }}>{sub.msg}</span>
                       {pd.phone && <a href={`https://wa.me/2${pd.phone}`} target="_blank" rel="noreferrer" style={{ fontSize: 10, color: "#25D366", textDecoration: "none" }}>📱 واتساب</a>}
+                      {!isP && pd.phone && (() => {
+                        const keys = Object.keys(attendance).filter(k => k.startsWith(`${coach.id}_`)).sort().slice(-3);
+                        const consecutive = keys.filter(k => attendance[k]?.[p.id] !== "present").length;
+                        return consecutive >= 2 ? (
+                          <button onClick={() => notifyAbsence(p, pd, coach.name, consecutive)}
+                            className="btn btn-xs" style={{ fontSize: 10, background: "#25D36622", color: "#25D366", border: "1px solid #25D36644" }}>
+                            ⚠️ إشعار غياب
+                          </button>
+                        ) : null;
+                      })()}
                     </div>
                   </div>
                   <div style={{ display: "flex", flexDirection: "column", gap: 4, alignItems: "flex-end" }}>
@@ -2720,6 +3091,7 @@ function CoachView({ coach, players, setPlayers, attendance, setAttendance, paym
         </div>
       )}
 
+      {tab === "reports" && <MonthlyComparison players={myPlayers} coaches={[coach]} attendance={attendance} payments={payments} coachId={coach.id} />}
       {tab === "reports" && (() => {
         const star = getPlayerOfMonth(myPlayers, coach.id, attendance, payments);
         const starAtt = star ? getDetailedAttendance(star.id, coach.id, attendance) : null;
@@ -2794,6 +3166,20 @@ function CoachView({ coach, players, setPlayers, attendance, setAttendance, paym
       {tab === "events" && (
         <CoachEvents myPlayers={myPlayers} events={events} playerDetails={playerDetails} setPlayerDetails={setPlayerDetails} />
       )}
+      {tab === "calendar" && <ClubCalendar events={events} trainingSettings={trainingSettings} coaches={coaches} coachId={coach.id} />}
+      {tab === "plan" && <TrainingPlan coach={coach} trainingPlan={trainingPlan} setTrainingPlan={setTrainingPlan} />}
+      {tab === "rating" && <WeeklyRating myPlayers={myPlayers} playerDetails={playerDetails} setPlayerDetails={setPlayerDetails} coachName={coach.name} />}
+      {tab === "messages" && (() => {
+        const unread = messages.filter(m => m.to === String(coach.id) && !m.read).length;
+        return (
+          <div>
+            {unread > 0 && <div className="card" style={{ borderColor: "var(--accent2)", background: "rgba(0,153,255,0.05)", marginBottom: 10, textAlign: "center" }}>
+              <span className="badge badge-blue" style={{ fontSize: 14, padding: "6px 16px" }}>🔔 عندك {unread} رسالة جديدة!</span>
+            </div>}
+            <InternalMessages user={coach} coaches={coaches} messages={messages} setMessages={setMessages} />
+          </div>
+        );
+      })()}
     </div>
   );
 }
@@ -2861,15 +3247,25 @@ function CoachEvents({ myPlayers, events, playerDetails, setPlayerDetails }) {
                             <span style={{ fontSize: 12, color: feePaid ? "var(--yellow)" : "var(--muted)" }}>سدد القيد</span>
                           </div>
                           {/* نتيجة الاختبار */}
-                          <div style={{ display: "flex", gap: 4 }}>
+                          <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
                             {["لم يمتحن", "نجح ✅", "رسب ❌"].map(result => (
                               <button key={result} onClick={() => {
                                 setPlayerDetails({ ...playerDetails, [p.id]: { ...pd, examResult: result } });
-                                if (result === "نجح ✅") showToast(`🎉 ${p.name} نجح في الاختبار!`, "success");
+                                if (result === "نجح ✅") {
+                                  showToast(`🎉 ${p.name} نجح في الاختبار!`, "success");
+                                  // رسالة تهنئة تلقائية
+                                  if (pd.phone) setTimeout(() => sendExamCongrats(p, pd, pd.belt, ev.name, "المدرب"), 500);
+                                }
                               }} className={`btn btn-xs ${pd.examResult === result ? (result === "نجح ✅" ? "btn-primary" : result === "رسب ❌" ? "btn-red" : "btn-ghost") : "btn-ghost"}`}>
                                 {result}
                               </button>
                             ))}
+                            {pd.examResult === "نجح ✅" && pd.phone && (
+                              <button onClick={() => sendExamCongrats(p, pd, pd.belt, ev.name, "المدرب")}
+                                className="btn btn-xs" style={{ background: "#25D36622", color: "#25D366", border: "1px solid #25D36644", fontSize: 10 }}>
+                                🎉 بعت تهنئة
+                              </button>
+                            )}
                           </div>
                         </div>
                       )}
