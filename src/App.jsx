@@ -306,12 +306,20 @@ const sendExamCongrats = (player, pd, belt, eventName, coachName) => {
   showToast(`تم إرسال تهنئة لولي أمر ${player.name} 🎉`, "success");
 };
 
-// ─────────── تاريخ الأحزمة ───────────
-const addBeltHistory = (playerDetails, setPlayerDetails, playerId, belt) => {
-  const pd = playerDetails[playerId] || {};
-  const history = pd.beltHistory || [];
-  const newEntry = { belt, date: getToday() };
-  setPlayerDetails({ ...playerDetails, [playerId]: { ...pd, beltHistory: [...history, newEntry] } });
+
+// ─────────── تنسيق التاريخ ───────────
+const formatDate = (dateStr) => {
+  if (!dateStr || typeof dateStr !== "string") return "";
+  const parts = dateStr.split("-");
+  if (parts.length === 3) return `${parts[2]}/${parts[1]}/${parts[0]}`;
+  return dateStr;
+};
+
+const isBirthday = (dateStr) => {
+  if (!dateStr || typeof dateStr !== "string") return false;
+  const today = new Date();
+  const d = new Date(dateStr);
+  return d.getDate() === today.getDate() && d.getMonth() === today.getMonth();
 };
 
 // ─────────── واتساب شير ───────────
@@ -359,7 +367,7 @@ const getSmartAlerts = (players, attendance, payments, coaches, playerDetails = 
 
     // عيد ميلاد النهارده
     if (pd.birthdate) {
-      const bd = new Date(pd.birthdate);
+      const bd = pd.birthdate && typeof pd.birthdate === "string" ? new Date(pd.birthdate) : new Date();
       if (bd.getDate() === today.getDate() && bd.getMonth() === today.getMonth()) {
         const age = today.getFullYear() - bd.getFullYear();
         alerts.push({ type: "birthday", msg: `🎂 عيد ميلاد ${p.name} النهارده! (${age} سنة)`, coach: coach?.name, color: "var(--yellow)", icon: "🎂" });
@@ -426,20 +434,41 @@ const globalCSS = `
 @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;800;900&display=swap');
 * { box-sizing: border-box; margin: 0; padding: 0; }
 :root {
-  --bg: #060b14; --surface: #0c1525; --surface2: #101d35; --surface3: #152040;
-  --border: #182a44; --border2: #1e3458;
-  --accent: #00d4aa; --accent2: #0099ff; --accent3: #7c3aed;
-  --red: #ff4560; --yellow: #ffc300; --orange: #ff7a00;
-  --text: #e8edf5; --muted: #4a6080; --muted2: #6a80a0;
-  --card-glow: 0 0 0 1px var(--border), 0 4px 24px rgba(0,0,0,0.5);
-  --card-glow-active: 0 0 0 1px var(--accent), 0 4px 32px rgba(0,212,170,0.15);
+  /* Premium Blue & Gold Theme */
+  --bg: #04080f;
+  --surface: #080f1e;
+  --surface2: #0c1628;
+  --surface3: #101e34;
+  --border: #1a2d4a;
+  --border2: #243d60;
+  --accent: #c9a84c;      /* Gold */
+  --accent2: #1e6fbf;     /* Royal Blue */
+  --accent3: #2d8ae0;     /* Bright Blue */
+  --gold: #c9a84c;
+  --gold2: #e8c96d;
+  --blue: #1e6fbf;
+  --blue2: #2d8ae0;
+  --red: #e05555;
+  --yellow: #c9a84c;
+  --orange: #e07a30;
+  --text: #eef2f8;
+  --muted: #4a6080;
+  --muted2: #6a85a8;
+  --card-glow: 0 0 0 1px rgba(201,168,76,0.15), 0 4px 24px rgba(0,0,0,0.6);
+  --card-glow-active: 0 0 0 1px rgba(201,168,76,0.4), 0 8px 32px rgba(201,168,76,0.12);
 }
 .light-mode {
-  --bg: #f0f4f8; --surface: #ffffff; --surface2: #e8edf5; --surface3: #dde3ed;
-  --border: #d0d8e8; --border2: #b8c4d8;
-  --text: #1a2540; --muted: #6a7a9a; --muted2: #8a9ab8;
-  --card-glow: 0 0 0 1px var(--border), 0 4px 16px rgba(0,0,0,0.08);
-  --card-glow-active: 0 0 0 1px var(--accent), 0 4px 20px rgba(0,212,170,0.12);
+  --bg: #f0f4fa;
+  --surface: #ffffff;
+  --surface2: #e8eef8;
+  --surface3: #dde5f5;
+  --border: #c8d8f0;
+  --border2: #b0c4e8;
+  --text: #0a1628;
+  --muted: #5a7090;
+  --muted2: #7a90b0;
+  --card-glow: 0 0 0 1px var(--border), 0 4px 16px rgba(0,0,0,0.06);
+  --card-glow-active: 0 0 0 1px var(--accent), 0 4px 20px rgba(201,168,76,0.15);
 }
 @keyframes slideDown { from { opacity:0; transform: translateY(-10px); } to { opacity:1; transform: translateY(0); } }
 @keyframes fadeIn { from { opacity:0; } to { opacity:1; } }
@@ -458,7 +487,7 @@ body { background: var(--bg); font-family: 'Tajawal', sans-serif; direction: rtl
   margin-bottom: 14px;
   transition: box-shadow 0.2s;
 }
-.card:hover { box-shadow: var(--card-glow-active); }
+.card:hover { box-shadow: var(--card-glow-active); border-color: rgba(201,168,76,0.25); }
 
 .glass {
   background: rgba(12,21,37,0.8);
@@ -499,10 +528,10 @@ select.input-field option { background: var(--surface); }
 }
 .btn:hover { transform: translateY(-1px); box-shadow: 0 4px 14px rgba(0,0,0,0.4); }
 .btn:active { transform: translateY(0); }
-.btn-primary { background: linear-gradient(135deg, #00d4aa, #009980); box-shadow: 0 2px 12px rgba(0,212,170,0.2); }
-.btn-blue { background: linear-gradient(135deg, #0099ff, #0077cc); box-shadow: 0 2px 12px rgba(0,153,255,0.2); }
-.btn-red { background: linear-gradient(135deg, #ff4560, #cc0000); box-shadow: 0 2px 12px rgba(255,69,96,0.2); }
-.btn-yellow { background: linear-gradient(135deg, #ffc300, #e6a800); color: #000; }
+.btn-primary { background: linear-gradient(135deg, #c9a84c, #a07830); box-shadow: 0 2px 16px rgba(201,168,76,0.3); color: #fff; }
+.btn-blue { background: linear-gradient(135deg, #1e6fbf, #155090); box-shadow: 0 2px 16px rgba(30,111,191,0.3); }
+.btn-red { background: linear-gradient(135deg, #e05555, #b03030); box-shadow: 0 2px 12px rgba(224,85,85,0.25); }
+.btn-yellow { background: linear-gradient(135deg, #c9a84c, #a07830); color: #fff; }
 .btn-ghost {
   background: var(--surface2);
   border: 1px solid var(--border2);
@@ -538,7 +567,7 @@ select.input-field option { background: var(--surface); }
   transition: all 0.2s;
   white-space: nowrap;
 }
-.tab-item.active { background: linear-gradient(135deg, var(--accent), #009980); color: #fff; box-shadow: 0 2px 10px rgba(0,212,170,0.3); }
+.tab-item.active { background: linear-gradient(135deg, #c9a84c, #a07830); color: #fff; box-shadow: 0 2px 14px rgba(201,168,76,0.35); letter-spacing: 0.3px; }
 .tab-item:not(.active):hover { background: var(--surface2); color: var(--text); }
 
 .player-row {
@@ -555,8 +584,8 @@ select.input-field option { background: var(--surface); }
 .player-row:hover { transform: translateX(-2px); border-color: var(--border2); }
 
 .header-bar {
-  background: rgba(12,21,37,0.95);
-  border-bottom: 1px solid var(--border);
+  background: rgba(4,8,15,0.97);
+  border-bottom: 1px solid rgba(201,168,76,0.2);
   padding: 14px 20px;
   display: flex;
   justify-content: space-between;
@@ -569,10 +598,12 @@ select.input-field option { background: var(--surface); }
 .logo-text {
   font-size: 20px;
   font-weight: 900;
-  background: linear-gradient(135deg, var(--accent), var(--accent2), var(--accent3));
+  background: linear-gradient(135deg, #e8c96d, #c9a84c, #2d8ae0);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
-  letter-spacing: -0.5px;
+  letter-spacing: 1px;
+  text-shadow: none;
+  filter: drop-shadow(0 0 8px rgba(201,168,76,0.3));
 }
 
 .att-btn {
@@ -589,9 +620,10 @@ select.input-field option { background: var(--surface); }
 }
 .att-btn:hover { border-color: var(--accent); }
 .att-btn-present {
-  background: rgba(0,212,170,0.15);
-  border-color: var(--accent);
-  color: var(--accent);
+  background: rgba(201,168,76,0.12);
+  border-color: var(--gold);
+  color: var(--gold);
+  box-shadow: 0 0 8px rgba(201,168,76,0.2);
 }
 
 .progress-bar {
@@ -599,9 +631,10 @@ select.input-field option { background: var(--surface); }
   bottom: 0;
   right: 0;
   height: 3px;
-  background: linear-gradient(90deg, var(--accent2), var(--accent));
+  background: linear-gradient(90deg, #1e6fbf, #c9a84c);
   border-radius: 0 0 16px 16px;
   transition: width 0.6s ease;
+  box-shadow: 0 0 6px rgba(201,168,76,0.4);
 }
 
 .stat-card {
@@ -620,7 +653,8 @@ select.input-field option { background: var(--surface); }
   position: absolute;
   top: 0; left: 0; right: 0;
   height: 2px;
-  background: var(--accent-line, linear-gradient(90deg, var(--accent), var(--accent2)));
+  background: var(--accent-line, linear-gradient(90deg, #c9a84c, #2d8ae0));
+  border-radius: 18px 18px 0 0;
 }
 .stat-value { font-size: 26px; font-weight: 900; line-height: 1; }
 .stat-label { font-size: 11px; color: var(--muted); margin-top: 4px; }
@@ -1005,7 +1039,7 @@ export default function App() {
     document.body.appendChild(script);
 
     const fetchData = async () => {
-      const adminData = [{ id: 100, username: "admin", password: "2201", name: "المدير العام", isAdmin: true }];
+      const adminData = [{ id: 100, username: "admin", password: "2201", name: "المدير الادارى", isAdmin: true }];
       try {
         const [cSnap, pSnap, aSnap, paySnap, nSnap, pdSnap, evSnap, logsSnap, pExtraSnap, trainSnap, msgSnap, tPlanSnap] = await Promise.all([
           getDoc(doc(db, "clubData", "coaches")),
@@ -1064,23 +1098,34 @@ export default function App() {
   if (loading) return (
     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "100vh", background: "var(--bg)", fontFamily: "'Tajawal',sans-serif", direction: "rtl" }}>
       <style>{`
-        @keyframes splashPulse { 0%,100%{transform:scale(1);opacity:1} 50%{transform:scale(1.15);opacity:0.8} }
+        @keyframes splashPulse { 0%,100%{transform:scale(1);opacity:1} 50%{transform:scale(1.1);opacity:0.85} }
         @keyframes splashFade { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
-        @keyframes spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
-        .splash-logo { animation: splashPulse 1.5s ease-in-out infinite; }
+        @keyframes goldSpin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
+        @keyframes goldPulse { 0%,100%{box-shadow:0 0 20px rgba(201,168,76,0.3)} 50%{box-shadow:0 0 40px rgba(201,168,76,0.6)} }
+        .splash-logo { animation: splashPulse 2s ease-in-out infinite; }
         .splash-text { animation: splashFade 0.8s ease forwards; }
-        .splash-ring { animation: spin 1.5s linear infinite; }
+        .splash-ring { animation: goldSpin 2s linear infinite; }
+        .splash-wrapper { animation: goldPulse 2s ease-in-out infinite; }
       `}</style>
-      <div style={{ position: "relative", marginBottom: 24 }}>
-        <svg className="splash-ring" width="100" height="100" viewBox="0 0 100 100">
-          <circle cx="50" cy="50" r="45" fill="none" stroke="var(--border)" strokeWidth="4"/>
-          <circle cx="50" cy="50" r="45" fill="none" stroke="var(--accent)" strokeWidth="4"
-            strokeDasharray="283" strokeDashoffset="200" strokeLinecap="round"/>
+      <div className="splash-wrapper" style={{ position: "relative", marginBottom: 28, borderRadius: "50%", padding: 8 }}>
+        <svg className="splash-ring" width="120" height="120" viewBox="0 0 120 120">
+          <circle cx="60" cy="60" r="54" fill="none" stroke="rgba(201,168,76,0.15)" strokeWidth="3"/>
+          <circle cx="60" cy="60" r="54" fill="none" stroke="url(#goldGrad)" strokeWidth="3"
+            strokeDasharray="339" strokeDashoffset="240" strokeLinecap="round"/>
+          <defs>
+            <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stopColor="#c9a84c"/>
+              <stop offset="100%" stopColor="#2d8ae0"/>
+            </linearGradient>
+          </defs>
         </svg>
-        <img src="/logo192.png" alt="logo" className="splash-logo" style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%,-50%)", width: 60, height: 60, objectFit: "contain", borderRadius: 12 }} />
+        <img src="/logo192.png" alt="logo" className="splash-logo" style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%,-50%)", width: 70, height: 70, objectFit: "contain", borderRadius: 16 }} />
       </div>
-      <div className="splash-text" style={{ fontSize: 26, fontWeight: 900, background: "linear-gradient(135deg,var(--accent),var(--accent2))", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>نادي الطالبية</div>
-      <div className="splash-text" style={{ fontSize: 13, color: "var(--muted)", marginTop: 8, animationDelay: "0.3s" }}>جاري التحميل...</div>
+      <div className="splash-text" style={{ fontSize: 28, fontWeight: 900, background: "linear-gradient(135deg,#e8c96d,#c9a84c,#2d8ae0)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", letterSpacing: 2 }}>نادي الطالبية</div>
+      <div className="splash-text" style={{ fontSize: 12, color: "var(--muted)", marginTop: 8, animationDelay: "0.3s", letterSpacing: 3, textTransform: "uppercase" }}>Academy Management</div>
+      <div style={{ marginTop: 20, display: "flex", gap: 6 }}>
+        {[0,1,2].map(i => <div key={i} style={{ width: 6, height: 6, borderRadius: "50%", background: i === 1 ? "#c9a84c" : "var(--border)", animation: `splashPulse ${1 + i * 0.3}s ease-in-out infinite` }} />)}
+      </div>
     </div>
   );
 
@@ -1095,13 +1140,15 @@ export default function App() {
           <div className="header-bar">
             <div>
               <div style={{ fontWeight: 800, fontSize: 15 }}>{user.name}</div>
-              <small style={{ color: "var(--muted)", fontSize: 11 }}>{user.isAdmin ? "🛡 مدير النادي" : "🥋 مدرب"}</small>
+              <small style={{ color: "var(--muted)", fontSize: 11 }}>{user.isAdmin ? "🛡 مدير" : "🥋 مدرب"}</small>
             </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <img src="/logo192.png" alt="logo" style={{ width: 28, height: 28, objectFit: "contain", borderRadius: 6 }} />
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <div style={{ position: "relative" }}>
+                <img src="/logo192.png" alt="logo" style={{ width: 32, height: 32, objectFit: "contain", borderRadius: 8, filter: "drop-shadow(0 0 6px rgba(201,168,76,0.4))" }} />
+              </div>
               <div>
-                <div className="logo-text">الطالبية</div>
-                <div style={{ fontSize: 9, color: "var(--muted)", marginTop: -2 }}>by Ahmed Sayed</div>
+                <div className="logo-text" style={{ fontSize: 18 }}>الطالبية</div>
+                <div style={{ fontSize: 9, color: "var(--muted)", letterSpacing: 1 }}>ACADEMY</div>
               </div>
             </div>
             <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
@@ -1177,16 +1224,20 @@ function LoginPage({ coaches, onLogin }) {
       <div style={{ position:"absolute", width:150, height:150, borderRadius:"50%", background:"rgba(0,153,255,0.04)", bottom:-30, left:-30, animation:"float2 6s ease-in-out infinite" }}/>
       <div className="login-card-anim" style={{ width: "100%", maxWidth: 360, position: "relative", zIndex: 1 }}>
         <div style={{ textAlign: "center", marginBottom: 32 }}>
-          <img src="/logo512.png" alt="logo" style={{ width: 90, height: 90, objectFit: "contain", borderRadius: 20, marginBottom: 8, filter: "drop-shadow(0 0 20px rgba(0,212,170,0.4))" }} />
-          <div className="logo-text" style={{ fontSize: 30 }}>نادي الطالبية</div>
-          <div style={{ color: "var(--muted)", fontSize: 13, marginTop: 6, letterSpacing: 2 }}>نظام إدارة الأكاديمية</div>
+          <div style={{ position: "relative", display: "inline-block", marginBottom: 4 }}>
+            <div style={{ position: "absolute", inset: -8, borderRadius: "50%", background: "radial-gradient(circle, rgba(201,168,76,0.2) 0%, transparent 70%)", animation: "goldPulse 2s ease-in-out infinite" }} />
+            <img src="/logo512.png" alt="logo" style={{ width: 100, height: 100, objectFit: "contain", borderRadius: 24, filter: "drop-shadow(0 0 24px rgba(201,168,76,0.5))", position: "relative" }} />
+          </div>
+          <div className="logo-text" style={{ fontSize: 32, marginTop: 8 }}>نادي الطالبية</div>
+          <div style={{ color: "var(--muted)", fontSize: 11, marginTop: 4, letterSpacing: 4, textTransform: "uppercase" }}>Academy Management System</div>
+          <div style={{ width: 40, height: 2, background: "linear-gradient(90deg, transparent, #c9a84c, transparent)", margin: "10px auto 0" }} />
         </div>
         <div className="card" style={{ padding: 28 }}>
           <input className="input-field" placeholder="اسم المستخدم" value={u} onChange={e => setU(e.target.value)}
             onKeyDown={e => e.key === "Enter" && document.getElementById("loginBtn").click()} />
           <input className="input-field" type="password" placeholder="كلمة المرور" value={p} onChange={e => setP(e.target.value)}
             onKeyDown={e => e.key === "Enter" && document.getElementById("loginBtn").click()} />
-          <button id="loginBtn" onClick={() => {
+          <button id="loginBtn" className="btn btn-primary btn-full" style={{ marginTop: 4, background: "linear-gradient(135deg, #c9a84c, #a07830)", boxShadow: "0 4px 20px rgba(201,168,76,0.4)", letterSpacing: 1, fontSize: 15, padding: 15 }} onClick={() => {
             const found = coaches.find(c => c.username.toLowerCase() === u.toLowerCase() && c.password === p);
             if (found) {
               // بنشغل صوت صامت أول عشان نفتح الـ AudioContext مع الـ click
@@ -1204,7 +1255,7 @@ function LoginPage({ coaches, onLogin }) {
               showToast(`مرحباً ${found.name}! 👋`, "success");
             }
             else { showToast("اسم المستخدم أو كلمة المرور خطأ", "error"); }
-          }} className="btn btn-primary btn-full" style={{ marginTop: 4, padding: 14 }}>دخول</button>
+          }}>دخول</button>
         </div>
         {/* Developer Credit */}
         <div style={{ textAlign: "center", marginTop: 24, padding: "12px 0" }}>
@@ -1258,10 +1309,10 @@ function AdminDashboard({ coaches, setCoaches, players, setPlayers, attendance, 
       {tab === "reports" && <AdminReports coaches={coaches} players={players} attendance={attendance} payments={payments} playerDetails={playerDetails} />}
       {tab === "players" && <AdminPlayers coaches={coaches} players={players} setPlayers={setPlayers} playerDetails={playerDetails} setPlayerDetails={setPlayerDetails} />}
       {tab === "coaches" && <AdminCoaches coaches={coaches} setCoaches={setCoaches} />}
-      {tab === "payments" && <AdminPayments players={players} payments={payments} setPayments={setPayments} />}
+      {tab === "payments" && <AdminPayments players={players} payments={payments} setPayments={setPayments} playerDetails={playerDetails} />}
       {tab === "events" && <AdminEvents events={events} setEvents={setEvents} players={players} playerDetails={playerDetails} setPlayerDetails={setPlayerDetails} coaches={coaches} />}
       {tab === "calendar" && <ClubCalendar events={events} trainingSettings={trainingSettings} coaches={coaches} coachId={null} />}
-      {tab === "messages" && <InternalMessages user={{ id: 100, name: "المدير العام", isAdmin: true }} coaches={coaches} messages={messages} setMessages={setMessages} />}
+      {tab === "messages" && <InternalMessages user={{ id: 100, name: "المدير الادارى", isAdmin: true }} coaches={coaches} messages={messages} setMessages={setMessages} />}
       {tab === "alerts" && <AdminAlerts players={players} attendance={attendance} payments={payments} coaches={coaches} playerDetails={playerDetails} />}
       {tab === "leaderboard" && <AdminLeaderboard players={players} coaches={coaches} attendance={attendance} payments={payments} playerDetails={playerDetails} />}
       {tab === "settings" && <AdminSettings trainingSettings={trainingSettings} setTrainingSettings={setTrainingSettings} coaches={coaches} />}
@@ -1524,7 +1575,7 @@ function AdminReports({ coaches, players, attendance, payments, playerDetails })
         "سداد القيد": pd.regFeePaid ? "مسدد" : "لم يسدد",
         "قيد الاختبار": pd.examRegistered ? "نعم" : "لا",
         "اسم الفعالية": pd.eventName || "---",
-        "تاريخ الميلاد": pd.birthdate || "---",
+        "تاريخ الميلاد": pd.birthdate ? (() => { const p = typeof pd.birthdate === "string" ? pd.birthdate.split("-") : []; return p.length===3 ? `${p[2]}/${p[1]}/${p[0]}` : String(pd.birthdate || "---"); })() : "---",
         "تليفون ولي الأمر": pd.phone || "---",
         "الوزن": pd.weight || "---",
         "الطول": pd.height || "---",
@@ -1694,7 +1745,6 @@ function AdminPlayers({ coaches, players, setPlayers, playerDetails, setPlayerDe
   const [selectedPlayers, setSelectedPlayers] = useState([]);
   const [targetCoach, setTargetCoach] = useState("");
   const [copyMode, setCopyMode] = useState(false);
-  const [importError, setImportError] = useState("");
 
   const add = () => {
     if (n && cId) {
@@ -1950,7 +2000,7 @@ function AdminPlayers({ coaches, players, setPlayers, playerDetails, setPlayerDe
                     {pd.joinDate && <span>· انضم: {pd.joinDate}</span>}
                     {pd.subType && (() => { const st = SUB_TYPES.find(s => s.label === pd.subType); return st ? <span style={{ color: st.color, fontWeight: 700, fontSize: 11 }}>{st.icon} {st.price} جنيه</span> : null; })()}
                     <span className={`badge ${pd.regFeePaid ? "badge-green" : "badge-red"}`} style={{ fontSize: 10 }}>🏷 {pd.regFeePaid ? "قيد مسدد" : "قيد غير مسدد"}</span>
-                    {pd.birthdate && (() => { const bd = new Date(pd.birthdate); const today = new Date(); const isToday = bd.getDate() === today.getDate() && bd.getMonth() === today.getMonth(); const year = bd.getFullYear(); return <span style={{ fontSize: 10, color: isToday ? "var(--yellow)" : "var(--muted)" }}>{isToday ? "🎂 عيد ميلاده النهارده!" : `مواليد ${year}`}</span>; })()}
+                    {pd.birthdate && (() => { const bd = pd.birthdate && typeof pd.birthdate === "string" ? new Date(pd.birthdate) : new Date(); const today = new Date(); const isToday = bd.getDate() === today.getDate() && bd.getMonth() === today.getMonth(); const parts2 = typeof pd.birthdate === "string" ? pd.birthdate.split("-") : []; return <span style={{ fontSize: 10, color: isToday ? "var(--yellow)" : "var(--muted)" }}>{isToday ? "🎂 عيد ميلاده النهارده!" : `${parts2.length===3 ? parts2[2]+"/"+parts2[1]+"/"+parts2[0] : pd.birthdate}`}</span>; })()}
                     {pd.phone && <a href={`tel:${pd.phone}`} style={{ fontSize: 10, color: "var(--accent2)" }}>📞 {pd.phone}</a>}
                   </div>
                 </div>
@@ -1977,15 +2027,24 @@ function AdminPlayers({ coaches, players, setPlayers, playerDetails, setPlayerDe
                       {BELTS.map(b => <option key={b.label} value={b.label}>{b.label}</option>)}
                     </select>
                     {pd.beltHistory && pd.beltHistory.length > 0 && (
-                      <div style={{ marginTop: 6 }}>
-                        <div style={{ fontSize: 10, color: "var(--muted)", marginBottom: 4 }}>📅 تاريخ الأحزمة:</div>
-                        <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-                          {pd.beltHistory.map((h, i) => (
-                            <span key={i} style={{ fontSize: 10, background: "var(--surface2)", padding: "2px 8px", borderRadius: 6, color: "var(--muted2)" }}>
-                              🥋 {h.belt} · {h.date}
-                            </span>
-                          ))}
-                        </div>
+                      <div style={{ marginTop: 8, background: "var(--surface2)", borderRadius: 10, padding: 10 }}>
+                        <div style={{ fontSize: 11, color: "var(--muted2)", marginBottom: 8, fontWeight: 700 }}>📅 تاريخ الأحزمة الكامل:</div>
+                        {pd.beltHistory.map((h, i) => {
+                          const beltObj = BELTS.find(b => b.label === h.belt);
+                          const parts = (h.date && typeof h.date === "string") ? h.date.split("-") : [];
+                          const fDate = parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : String(h.date || "");
+                          return (
+                            <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderBottom: i < pd.beltHistory.length - 1 ? "1px solid var(--border)" : "none" }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                <div style={{ width: 12, height: 12, borderRadius: "50%", background: beltObj?.color || "#888", border: "1px solid rgba(255,255,255,0.2)" }} />
+                                <span style={{ fontSize: 12, fontWeight: i === pd.beltHistory.length - 1 ? 800 : 400, color: i === pd.beltHistory.length - 1 ? "var(--text)" : "var(--muted2)" }}>
+                                  🥋 {h.belt} {i === pd.beltHistory.length - 1 ? "(الحالي)" : ""}
+                                </span>
+                              </div>
+                              <span style={{ fontSize: 11, color: "var(--muted)" }}>📅 {fDate}</span>
+                            </div>
+                          );
+                        })}
                       </div>
                     )}
                   </div>
@@ -2057,8 +2116,11 @@ function AdminPlayers({ coaches, players, setPlayers, playerDetails, setPlayerDe
 }
 
 // ─────────── Admin Payments ───────────
-function AdminPayments({ players, payments, setPayments }) {
+function AdminPayments({ players, payments, setPayments, playerDetails = {} }) {
   const [d, setD] = useState(getToday());
+  const [receiptNo, setReceiptNo] = useState("");
+  const [receiptImg, setReceiptImg] = useState({});
+  const [viewReceipt, setViewReceipt] = useState(null);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
 
@@ -2071,14 +2133,27 @@ function AdminPayments({ players, payments, setPayments }) {
 
   return (
     <div>
-      <div className="card" style={{ display: "flex", gap: 10, alignItems: "center" }}>
-        <div style={{ flex: 1 }}>
-          <label style={{ fontSize: 12, color: "var(--muted)", display: "block", marginBottom: 4 }}>تاريخ الدفع</label>
-          <input type="date" className="input-field" style={{ marginBottom: 0 }} value={d} onChange={e => setD(e.target.value)} />
+      {/* عارض صورة الإيصال */}
+      {viewReceipt && (
+        <div onClick={() => setViewReceipt(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.9)", zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
+          <div style={{ position: "relative", maxWidth: "90vw", maxHeight: "90vh" }}>
+            <img src={viewReceipt} alt="إيصال" style={{ maxWidth: "100%", maxHeight: "85vh", borderRadius: 12, boxShadow: "0 0 40px rgba(201,168,76,0.3)" }} />
+            <button onClick={() => setViewReceipt(null)} className="btn btn-red btn-sm" style={{ position: "absolute", top: -12, left: -12 }}>✕</button>
+          </div>
         </div>
-        <div style={{ textAlign: "center" }}>
-          <div style={{ fontSize: 22, fontWeight: 900, color: "var(--accent)" }}>{players.filter(p => payments[p.id]?.paid).length}</div>
-          <div style={{ fontSize: 11, color: "var(--muted)" }}>مسددين</div>
+      )}
+      <div className="card">
+        <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+          <div style={{ flex: 1 }}>
+            <label style={{ fontSize: 12, color: "var(--muted)", display: "block", marginBottom: 4 }}>📅 تاريخ الدفع</label>
+            <input type="date" className="input-field" style={{ marginBottom: 8 }} value={d} onChange={e => setD(e.target.value)} />
+            <label style={{ fontSize: 12, color: "var(--muted)", display: "block", marginBottom: 4 }}>🧾 رقم الإيصال</label>
+            <input className="input-field" style={{ marginBottom: 0 }} placeholder="مثال: 00123" value={receiptNo} onChange={e => setReceiptNo(e.target.value)} />
+          </div>
+          <div style={{ textAlign: "center", paddingTop: 20 }}>
+            <div style={{ fontSize: 22, fontWeight: 900, color: "var(--accent)" }}>{players.filter(p => payments[p.id]?.paid).length}</div>
+            <div style={{ fontSize: 11, color: "var(--muted)" }}>مسددين</div>
+          </div>
         </div>
       </div>
 
@@ -2090,22 +2165,55 @@ function AdminPayments({ players, payments, setPayments }) {
       <input className="input-field" placeholder="🔍 بحث..." value={search} onChange={e => setSearch(e.target.value)} />
 
       {filtered.map(p => (
-        <div key={p.id} className="player-row" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <div>
-            <div style={{ fontWeight: 700 }}>{p.name}</div>
-            {payments[p.id]?.date && <div style={{ fontSize: 11, color: "var(--yellow)", marginTop: 2 }}>📅 {payments[p.id].date}</div>}
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <span className={`badge ${payments[p.id]?.paid ? "badge-green" : "badge-red"}`}>
-              {payments[p.id]?.paid ? "مسدد ✅" : "غير مسدد"}
-            </span>
-            <button onClick={() => {
-              const cur = payments[p.id]?.paid;
-              setPayments({ ...payments, [p.id]: { paid: !cur, date: !cur ? d : null } });
-              showToast(!cur ? `تم تسجيل دفع ${p.name} ✅` : `تم إلغاء دفع ${p.name}`, !cur ? "success" : "info");
-            }} className={`btn btn-sm ${payments[p.id]?.paid ? "btn-ghost" : "btn-primary"}`}>
-              {payments[p.id]?.paid ? "إلغاء" : "تسجيل دفع"}
-            </button>
+        <div key={p.id} className="player-row">
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: 700 }}>{p.name}</div>
+              {payments[p.id]?.date && <div style={{ fontSize: 11, color: "var(--yellow)", marginTop: 2 }}>📅 آخر دفع: {payments[p.id].date}</div>}
+              {payments[p.id]?.receiptNo && <div style={{ fontSize: 11, color: "var(--accent2)", marginTop: 1 }}>🧾 إيصال رقم: {payments[p.id].receiptNo}</div>}
+              {payments[p.id]?.history?.length > 0 && (
+                <div style={{ fontSize: 10, color: "var(--muted)", marginTop: 2 }}>
+                  إجمالي: <span style={{ color: "var(--accent)", fontWeight: 700 }}>{payments[p.id].history.reduce((s, h) => s + (h.amount || 0), 0)} جنيه</span>
+                  · ({payments[p.id].history.length} دفعة)
+                </div>
+              )}
+              {/* رفع صورة الإيصال */}
+              <div style={{ display: "flex", gap: 6, marginTop: 4 }}>
+                <input type="file" accept="image/*" id={`receipt_${p.id}`} style={{ display: "none" }}
+                  onChange={e => {
+                    const file = e.target.files[0];
+                    if (!file) return;
+                    const reader = new FileReader();
+                    reader.onload = ev => {
+                      setReceiptImg(prev => ({ ...prev, [p.id]: ev.target.result }));
+                      setPayments({ ...payments, [p.id]: { ...payments[p.id], receiptImg: ev.target.result } });
+                      showToast("تم رفع صورة الإيصال ✅", "success");
+                    };
+                    reader.readAsDataURL(file);
+                  }} />
+                <button onClick={() => document.getElementById(`receipt_${p.id}`).click()}
+                  className="btn btn-ghost btn-xs">📸 رفع إيصال</button>
+                {payments[p.id]?.receiptImg && (
+                  <button onClick={() => setViewReceipt(payments[p.id].receiptImg)}
+                    className="btn btn-xs" style={{ background: "rgba(201,168,76,0.15)", color: "var(--gold)", border: "1px solid rgba(201,168,76,0.3)" }}>🧾 عرض</button>
+                )}
+              </div>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span className={`badge ${payments[p.id]?.paid ? "badge-green" : "badge-red"}`}>
+                {payments[p.id]?.paid ? "مسدد ✅" : "غير مسدد"}
+              </span>
+              <button onClick={() => {
+                const cur = payments[p.id]?.paid;
+                const currentHistory = payments[p.id]?.history || [];
+                const newHistory = !cur ? [...currentHistory, { date: d, amount: (() => { const st = SUB_TYPES.find(s => s.label === (playerDetails?.[p.id]?.subType)); return st ? st.price : 300; })() }] : currentHistory;
+                setPayments({ ...payments, [p.id]: { paid: !cur, date: !cur ? d : null, history: newHistory, receiptNo: !cur ? receiptNo : null, receiptImg: !cur ? (receiptImg[p.id] || null) : null } });
+                showToast(!cur ? `تم تسجيل دفع ${p.name} ✅` : `تم إلغاء دفع ${p.name}`, !cur ? "success" : "info");
+                if (!cur) setReceiptNo("");
+              }} className={`btn btn-sm ${payments[p.id]?.paid ? "btn-ghost" : "btn-primary"}`}>
+                {payments[p.id]?.paid ? "إلغاء" : "تسجيل دفع"}
+              </button>
+            </div>
           </div>
         </div>
       ))}
@@ -2183,7 +2291,7 @@ function AdminEvents({ events, setEvents, players, playerDetails, setPlayerDetai
                         "اسم اللاعب": p.name,
                         "المدرب": coach?.name || "---",
                         "الحزام": pd.belt || "---",
-                        "تاريخ الميلاد": pd.birthdate || "---",
+                        "تاريخ الميلاد": pd.birthdate ? (() => { const p = typeof pd.birthdate === "string" ? pd.birthdate.split("-") : []; return p.length===3 ? `${p[2]}/${p[1]}/${p[0]}` : String(pd.birthdate || "---"); })() : "---",
                         "السن": age,
                         "الوزن (كجم)": pd.weight || "---",
                         "الطول (سم)": pd.height || "---",
@@ -3045,7 +3153,7 @@ function CoachView({ coach, players, setPlayers, attendance, setAttendance, paym
                     <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                       <b>{p.name}</b>
                       {pd.belt && <BeltBadge belt={pd.belt} />}
-                      {pd.birthdate && (() => { const d = new Date(pd.birthdate); const t = new Date(); return d.getDate()===t.getDate()&&d.getMonth()===t.getMonth() ? <span style={{fontSize:12}}>🎂</span> : null; })()}
+                      {pd.birthdate && typeof pd.birthdate === "string" && (() => { const d = new Date(pd.birthdate); const t = new Date(); return d.getDate()===t.getDate()&&d.getMonth()===t.getMonth() ? <span style={{fontSize:12}}>🎂</span> : null; })()}
                       {pd.medical && <span style={{ fontSize: 10, color: "var(--red)", fontWeight: 700, background: "rgba(255,69,96,0.1)", padding: "2px 6px", borderRadius: 6 }}>⚕️ {pd.medical}</span>}
                     </div>
                     <div style={{ display: "flex", gap: 6, alignItems: "center", marginTop: 2, flexWrap: "wrap" }}>
@@ -3122,7 +3230,7 @@ function CoachView({ coach, players, setPlayers, attendance, setAttendance, paym
                 <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                   <b>{p.name}</b>
                   {pd.belt && <BeltBadge belt={pd.belt} />}
-                  {isBirthday && <span style={{ fontSize: 11, color: "var(--yellow)", fontWeight: 800 }}>🎂 عيد ميلاده!</span>}
+                    {isBirthday && <span style={{ fontSize: 11, color: "var(--yellow)", fontWeight: 800 }}>🎂 عيد ميلاده</span>}
                 </div>
                 <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 2 }}>
                   حضور: <b style={{ color: "var(--accent)" }}>{att.count}</b> يوم · {sub.msg}
