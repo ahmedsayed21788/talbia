@@ -1039,7 +1039,7 @@ export default function App() {
     document.body.appendChild(script);
 
     const fetchData = async () => {
-      const adminData = [{ id: 100, username: "admin", password: "2201", name: "المدير الادارى", isAdmin: true }];
+      const adminData = [{ id: 100, username: "admin", password: "2201", name: "المدير العام", isAdmin: true }];
       try {
         const [cSnap, pSnap, aSnap, paySnap, nSnap, pdSnap, evSnap, logsSnap, pExtraSnap, trainSnap, msgSnap, tPlanSnap] = await Promise.all([
           getDoc(doc(db, "clubData", "coaches")),
@@ -1312,7 +1312,7 @@ function AdminDashboard({ coaches, setCoaches, players, setPlayers, attendance, 
       {tab === "payments" && <AdminPayments players={players} payments={payments} setPayments={setPayments} playerDetails={playerDetails} />}
       {tab === "events" && <AdminEvents events={events} setEvents={setEvents} players={players} playerDetails={playerDetails} setPlayerDetails={setPlayerDetails} coaches={coaches} />}
       {tab === "calendar" && <ClubCalendar events={events} trainingSettings={trainingSettings} coaches={coaches} coachId={null} />}
-      {tab === "messages" && <InternalMessages user={{ id: 100, name: "المدير الادارى", isAdmin: true }} coaches={coaches} messages={messages} setMessages={setMessages} />}
+      {tab === "messages" && <InternalMessages user={{ id: 100, name: "المدير العام", isAdmin: true }} coaches={coaches} messages={messages} setMessages={setMessages} />}
       {tab === "alerts" && <AdminAlerts players={players} attendance={attendance} payments={payments} coaches={coaches} playerDetails={playerDetails} />}
       {tab === "leaderboard" && <AdminLeaderboard players={players} coaches={coaches} attendance={attendance} payments={payments} playerDetails={playerDetails} />}
       {tab === "settings" && <AdminSettings trainingSettings={trainingSettings} setTrainingSettings={setTrainingSettings} coaches={coaches} />}
@@ -1997,7 +1997,7 @@ function AdminPlayers({ coaches, players, setPlayers, playerDetails, setPlayerDe
                   </div>
                   <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 2, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
                     <span>{coach?.name || "---"}</span>
-                    {pd.joinDate && <span>· انضم: {pd.joinDate}</span>}
+                    {(() => { const lastBelt = pd.beltHistory?.[pd.beltHistory?.length - 1]; const beltDate = lastBelt?.date || pd.joinDate; return beltDate ? <span>· حزام منذ: {formatDate(beltDate)}</span> : null; })()}
                     {pd.subType && (() => { const st = SUB_TYPES.find(s => s.label === pd.subType); return st ? <span style={{ color: st.color, fontWeight: 700, fontSize: 11 }}>{st.icon} {st.price} جنيه</span> : null; })()}
                     <span className={`badge ${pd.regFeePaid ? "badge-green" : "badge-red"}`} style={{ fontSize: 10 }}>🏷 {pd.regFeePaid ? "قيد مسدد" : "قيد غير مسدد"}</span>
                     {pd.birthdate && (() => { const bd = pd.birthdate && typeof pd.birthdate === "string" ? new Date(pd.birthdate) : new Date(); const today = new Date(); const isToday = bd.getDate() === today.getDate() && bd.getMonth() === today.getMonth(); const parts2 = typeof pd.birthdate === "string" ? pd.birthdate.split("-") : []; return <span style={{ fontSize: 10, color: isToday ? "var(--yellow)" : "var(--muted)" }}>{isToday ? "🎂 عيد ميلاده النهارده!" : `${parts2.length===3 ? parts2[2]+"/"+parts2[1]+"/"+parts2[0] : pd.birthdate}`}</span>; })()}
@@ -2028,29 +2028,65 @@ function AdminPlayers({ coaches, players, setPlayers, playerDetails, setPlayerDe
                     </select>
                     {pd.beltHistory && pd.beltHistory.length > 0 && (
                       <div style={{ marginTop: 8, background: "var(--surface2)", borderRadius: 10, padding: 10 }}>
-                        <div style={{ fontSize: 11, color: "var(--muted2)", marginBottom: 8, fontWeight: 700 }}>📅 تاريخ الأحزمة الكامل:</div>
+                        <div style={{ fontSize: 11, color: "var(--muted2)", marginBottom: 8, fontWeight: 700 }}>📅 تاريخ الأحزمة — اضغط للتعديل:</div>
                         {pd.beltHistory.map((h, i) => {
                           const beltObj = BELTS.find(b => b.label === h.belt);
                           const parts = (h.date && typeof h.date === "string") ? h.date.split("-") : [];
                           const fDate = parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : String(h.date || "");
+                          const isLast = i === pd.beltHistory.length - 1;
                           return (
-                            <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderBottom: i < pd.beltHistory.length - 1 ? "1px solid var(--border)" : "none" }}>
-                              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                                <div style={{ width: 12, height: 12, borderRadius: "50%", background: beltObj?.color || "#888", border: "1px solid rgba(255,255,255,0.2)" }} />
-                                <span style={{ fontSize: 12, fontWeight: i === pd.beltHistory.length - 1 ? 800 : 400, color: i === pd.beltHistory.length - 1 ? "var(--text)" : "var(--muted2)" }}>
-                                  🥋 {h.belt} {i === pd.beltHistory.length - 1 ? "(الحالي)" : ""}
-                                </span>
+                            <div key={i} style={{ padding: "8px 0", borderBottom: i < pd.beltHistory.length - 1 ? "1px solid var(--border)" : "none" }}>
+                              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                  <div style={{ width: 12, height: 12, borderRadius: "50%", background: beltObj?.color || "#888", border: "1px solid rgba(255,255,255,0.2)", flexShrink: 0 }} />
+                                  <select value={h.belt} onChange={e => {
+                                    const newHistory = pd.beltHistory.map((bh, bi) => bi === i ? { ...bh, belt: e.target.value } : bh);
+                                    const newBelt = isLast ? e.target.value : pd.belt;
+                                    setPlayerDetails({ ...playerDetails, [p.id]: { ...pd, beltHistory: newHistory, belt: newBelt } });
+                                    showToast("تم تحديث الحزام ✅", "success");
+                                  }} style={{ fontSize: 12, background: "var(--bg)", color: isLast ? "var(--text)" : "var(--muted2)", border: "1px solid var(--border)", borderRadius: 6, padding: "2px 6px", fontWeight: isLast ? 800 : 400, fontFamily: "Tajawal" }}>
+                                    {BELTS.map(b => <option key={b.label} value={b.label}>{b.label}</option>)}
+                                  </select>
+                                  {isLast && <span style={{ fontSize: 10, color: "var(--accent)", fontWeight: 700 }}>الحالي</span>}
+                                </div>
+                                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                                  <input type="date" value={h.date || ""} onChange={e => {
+                                    const newHistory = pd.beltHistory.map((bh, bi) => bi === i ? { ...bh, date: e.target.value } : bh);
+                                    setPlayerDetails({ ...playerDetails, [p.id]: { ...pd, beltHistory: newHistory } });
+                                    showToast("تم تحديث تاريخ الحزام ✅", "success");
+                                  }} style={{ fontSize: 11, background: "var(--bg)", color: "var(--muted)", border: "1px solid var(--border)", borderRadius: 6, padding: "2px 6px", fontFamily: "Tajawal" }} />
+                                  <button onClick={() => {
+                                    if (pd.beltHistory.length <= 1) return showToast("لازم يفضل حزام واحد على الأقل", "error");
+                                    setConfirm({ msg: `حذف حزام ${h.belt}؟`, fn: () => {
+                                      const newHistory = pd.beltHistory.filter((_, bi) => bi !== i);
+                                      const newBelt = newHistory[newHistory.length - 1]?.belt || "أبيض";
+                                      setPlayerDetails({ ...playerDetails, [p.id]: { ...pd, beltHistory: newHistory, belt: newBelt } });
+                                      showToast("تم حذف الحزام", "info");
+                                    }});
+                                  }} className="btn btn-red btn-xs">🗑</button>
+                                </div>
                               </div>
-                              <span style={{ fontSize: 11, color: "var(--muted)" }}>📅 {fDate}</span>
                             </div>
                           );
                         })}
+                        {/* إضافة حزام جديد */}
+                        <button onClick={() => {
+                          const newHistory = [...(pd.beltHistory || []), { belt: "أبيض", date: getToday() }];
+                          setPlayerDetails({ ...playerDetails, [p.id]: { ...pd, beltHistory: newHistory } });
+                          showToast("تم إضافة حزام جديد ✅", "success");
+                        }} className="btn btn-ghost btn-sm btn-full" style={{ marginTop: 8 }}>➕ إضافة حزام</button>
                       </div>
                     )}
                   </div>
                   <div>
-                    <label style={{ fontSize: 11, color: "var(--muted)", display: "block", marginBottom: 4 }}>تاريخ الانضمام</label>
-                    <input type="date" className="input-field" value={pd.joinDate || ""} onChange={e => setPlayerDetails({ ...playerDetails, [p.id]: { ...pd, joinDate: e.target.value } })} />
+                    <label style={{ fontSize: 11, color: "var(--muted)", display: "block", marginBottom: 4 }}>📅 تاريخ الحزام الحالي</label>
+                    <input type="date" className="input-field" value={(() => { const last = pd.beltHistory?.[pd.beltHistory.length - 1]; return last?.date || pd.joinDate || ""; })()} onChange={e => {
+                      const newHistory = pd.beltHistory?.length > 0
+                        ? pd.beltHistory.map((h, i) => i === pd.beltHistory.length - 1 ? { ...h, date: e.target.value } : h)
+                        : [{ belt: pd.belt || "أبيض", date: e.target.value }];
+                      setPlayerDetails({ ...playerDetails, [p.id]: { ...pd, beltHistory: newHistory, joinDate: e.target.value } });
+                    }} />
+                    {pd.joinDate && <div style={{ fontSize: 10, color: "var(--muted)", marginTop: 2 }}>تاريخ الانضمام: {formatDate(pd.joinDate)}</div>}
                   </div>
                 </div>
                 {/* سداد القيد الموسمي */}
@@ -3230,7 +3266,7 @@ function CoachView({ coach, players, setPlayers, attendance, setAttendance, paym
                 <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                   <b>{p.name}</b>
                   {pd.belt && <BeltBadge belt={pd.belt} />}
-                    {isBirthday && <span style={{ fontSize: 11, color: "var(--yellow)", fontWeight: 800 }}>🎂 عيد ميلاده</span>}
+                  {isBirthday && <span style={{ fontSize: 11, color: "var(--yellow)", fontWeight: 800 }}>🎂 عيد ميلاده!</span>}
                 </div>
                 <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 2 }}>
                   حضور: <b style={{ color: "var(--accent)" }}>{att.count}</b> يوم · {sub.msg}
