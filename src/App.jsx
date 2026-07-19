@@ -17,6 +17,57 @@ const db = getFirestore(app);
 
 const getToday = () => new Date().toISOString().split("T")[0];
 
+// ═══════════════════ DEMO MODE — بيانات وهمية بالكامل، منفصلة عن الداتا الحقيقية ═══════════════════
+// تحذير: أي تعديل هنا لازم يفضل بيانات وهمية فقط. الوضع التجريبي بيمنع أي حفظ على Firebase الحقيقي (شوف save() في App).
+const DEMO_COACHES = [
+  { id: 9001, username: "demo_admin", password: "demo123", name: "مدير تجريبي", isAdmin: true },
+  { id: 9002, username: "demo_coach", password: "demo123", name: "كابتن تجريبي", isAdmin: false, team: "الفريق التجريبي" },
+];
+
+const DEMO_PLAYERS = [
+  { id: 9101, name: "لاعب تجريبي ١", coachId: 9002 },
+  { id: 9102, name: "لاعب تجريبي ٢", coachId: 9002 },
+  { id: 9103, name: "لاعب تجريبي ٣", coachId: 9002 },
+  { id: 9104, name: "لاعب تجريبي ٤", coachId: 9002 },
+];
+
+const DEMO_PLAYER_DETAILS = {
+  9101: { belt: "أخضر(6)", subType: "عضو بالنادي" },
+  9102: { belt: "أزرق(4)", subType: "غير عضو" },
+  9103: { belt: "أبيض", subType: "عضو بالنادي" },
+  9104: { belt: "برتقالي(8)", subType: "أخوات (اتنين)" },
+};
+
+const DEMO_PAYMENTS = {
+  9101: { paid: true, date: getToday(), receiptNo: "0001", history: [{ date: getToday(), amount: 150 }] },
+  9102: { paid: false, date: null, history: [] },
+  9103: { paid: true, date: getToday(), receiptNo: "0002", history: [{ date: getToday(), amount: 150 }] },
+  9104: { paid: false, date: null, history: [] },
+};
+
+const DEMO_ATTENDANCE = {
+  [`9002_${getToday()}`]: { 9101: "present", 9102: "present", 9103: "absent", 9104: "present" },
+};
+
+const DEMO_EVENTS = [
+  { id: 1, title: "بطولة تجريبية داخلية", date: getToday(), note: "حدث توضيحي — بيانات وهمية" },
+];
+
+const buildDemoState = () => ({
+  coaches: DEMO_COACHES,
+  players: DEMO_PLAYERS,
+  attendance: DEMO_ATTENDANCE,
+  payments: DEMO_PAYMENTS,
+  notes: {},
+  playerDetails: DEMO_PLAYER_DETAILS,
+  events: DEMO_EVENTS,
+  logs: [],
+  playerExtra: {},
+  trainingSettings: { startHour: 17, duration: 90 },
+  messages: [],
+  trainingPlan: {},
+});
+
 const BELTS = [
   { label: "أبيض", color: "#f0f0f0", textColor: "#000" },
   { label: "(10)أصفر", color: "#FFD700", textColor: "#000" },
@@ -1016,7 +1067,31 @@ export default function App() {
   const [darkMode, setDarkMode] = useState(true);
   const [messages, setMessages] = useState([]);
   const [trainingPlan, setTrainingPlan] = useState({});
+  const [isDemoMode, setIsDemoMode] = useState(false);
   const lastActivityRef = useRef(Date.now());
+
+  // بدء الوضع التجريبي: بيانات وهمية بالكامل، وممنوع أي حفظ حقيقي على Firebase
+  const startDemo = (role) => {
+    const demo = buildDemoState();
+    setCoaches(demo.coaches);
+    setPlayers(demo.players);
+    setAttendance(demo.attendance);
+    setPayments(demo.payments);
+    setNotes(demo.notes);
+    setPlayerDetails(demo.playerDetails);
+    setEvents(demo.events);
+    setLogs(demo.logs);
+    setPlayerExtra(demo.playerExtra);
+    setTrainingSettings(demo.trainingSettings);
+    setMessages(demo.messages);
+    setTrainingPlan(demo.trainingPlan);
+    setIsDemoMode(true);
+    setUser(role === "admin" ? demo.coaches[0] : demo.coaches[1]);
+    showToast("أنت الآن في الوضع التجريبي — البيانات كلها وهمية ولا يتم حفظ أي تعديل 🔎", "info");
+  };
+
+  // الخروج من الوضع التجريبي: بعمل reload كامل عشان نرجع نجيب البيانات الحقيقية من جديد بأمان
+  const exitDemo = () => { window.location.reload(); };
 
   // تسجيل خروج تلقائي بعد 30 دقيقة
   useEffect(() => {
@@ -1091,6 +1166,7 @@ export default function App() {
   }, [loading]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const save = async (key, data) => {
+    if (isDemoMode) return; // وضع تجريبي: ممنوع الكتابة على Firebase الحقيقي نهائيًا
     try { await setDoc(doc(db, "clubData", key), { value: JSON.stringify(data) }); }
     catch (e) { console.error("Save error:", e); }
   };
@@ -1134,9 +1210,15 @@ export default function App() {
       <style>{globalCSS}</style>
       <ToastContainer />
       {!user ? (
-        <LoginPage coaches={coaches} onLogin={setUser} />
+        <LoginPage coaches={coaches} onLogin={setUser} onDemoLogin={startDemo} />
       ) : (
         <>
+          {isDemoMode && (
+            <div style={{ background: "linear-gradient(90deg,#c9a84c,#a07830)", color: "#1a1a1a", textAlign: "center", padding: "8px 12px", fontSize: 12.5, fontWeight: 800, letterSpacing: 0.3 }}>
+              🔎 وضع تجريبي — كل البيانات هنا وهمية ولا يتم حفظ أي تعديل
+              <button onClick={exitDemo} style={{ marginRight: 10, background: "rgba(0,0,0,0.15)", border: "none", borderRadius: 6, padding: "3px 10px", fontSize: 11.5, fontWeight: 700, cursor: "pointer", color: "#1a1a1a" }}>خروج من التجربة</button>
+            </div>
+          )}
           <div className="header-bar">
             <div>
               <div style={{ fontWeight: 800, fontSize: 15 }}>{user.name}</div>
@@ -1153,7 +1235,7 @@ export default function App() {
             </div>
             <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
               <ThemeToggle darkMode={darkMode} setDarkMode={setDarkMode} />
-              <button onClick={() => { setUser(null); showToast("تم تسجيل الخروج بنجاح", "info"); }} className="btn btn-ghost btn-sm">خروج</button>
+              <button onClick={() => { if (isDemoMode) { exitDemo(); } else { setUser(null); showToast("تم تسجيل الخروج بنجاح", "info"); } }} className="btn btn-ghost btn-sm">خروج</button>
             </div>
           </div>
           <div style={{ maxWidth: 720, margin: "0 auto", padding: "16px" }}>
@@ -1198,9 +1280,11 @@ export default function App() {
 }
 
 // ═══════════════════════════════ LOGIN ═══════════════════════════
-function LoginPage({ coaches, onLogin }) {
+function LoginPage({ coaches, onLogin, onDemoLogin }) {
   const [u, setU] = useState(""); const [p, setP] = useState("");
   const [audioReady, setAudioReady] = useState(false);
+  // الديمو بيظهر بس لو الزائر داخل بلينك فيه ?demo=1 — المدربين والأهالي (اللينك العادي) مش هيشوفوه خالص
+  const showDemoEntry = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("demo") === "1";
 
   // تفعيل الصوت لما المستخدم يعمل أي click
   const enableAudio = () => {
@@ -1257,6 +1341,20 @@ function LoginPage({ coaches, onLogin }) {
             else { showToast("اسم المستخدم أو كلمة المرور خطأ", "error"); }
           }}>دخول</button>
         </div>
+
+        {/* دخول تجريبي — بيانات وهمية بالكامل، للزوار اللي عايزين يشوفوا شكل النظام */}
+        {onDemoLogin && showDemoEntry && (
+          <div className="card" style={{ padding: 18, marginTop: 16, background: "rgba(201,168,76,0.06)", border: "1px dashed rgba(201,168,76,0.35)" }}>
+            <div style={{ fontSize: 12, color: "var(--muted)", textAlign: "center", marginBottom: 10 }}>
+              🔎 عايز تجرب البرنامج بس؟ ادخل بحساب تجريبي ببيانات وهمية بالكامل
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={() => onDemoLogin("admin")} className="btn btn-ghost btn-sm" style={{ flex: 1 }}>دخول كمدير (تجريبي)</button>
+              <button onClick={() => onDemoLogin("coach")} className="btn btn-ghost btn-sm" style={{ flex: 1 }}>دخول كمدرب (تجريبي)</button>
+            </div>
+          </div>
+        )}
+
         {/* Developer Credit */}
         <div style={{ textAlign: "center", marginTop: 24, padding: "12px 0" }}>
           <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 6 }}>تم التطوير بواسطة</div>
